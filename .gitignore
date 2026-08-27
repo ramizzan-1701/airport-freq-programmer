@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+nasr_cache/
+
+# Machine-local Claude Code permission grants (launch.json is shared, this isn't)
+.claude/settings.local.json
+
+# Build output
+build/
+dist/
