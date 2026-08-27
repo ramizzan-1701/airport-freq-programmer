@@ -1,0 +1,100 @@
+name: Test and build desktop apps
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # pywebview is a hard dependency of the afp package, and on Linux it
+      # needs GTK/WebKit system libraries that aren't on the runner image.
+      # The tests never open a window, but importing afp.desktop still
+      # requires the module to load.
+      - name: Install Linux GUI libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-gi gir1.2-webkit2-4.1 libcairo2-dev libgirepository1.0-dev
+
+      - name: Install package
+        run: pip install -e ".[dev]"
+
+      - name: Run tests
+        run: pytest -q
+
+  build-windows:
+    name: Build Windows .exe
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package and PyInstaller
+        run: pip install -e ".[build-windows]"
+
+      - name: Build
+        run: pyinstaller --noconfirm --clean packaging/afp.spec
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AirportFreqProgrammer-windows
+          path: dist/AirportFreqProgrammer.exe
+          if-no-files-found: error
+
+  build-macos:
+    name: Build macOS .app
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package and py2app
+        run: pip install -e ".[build-macos]"
+
+      - name: Build
+        run: python packaging/py2app_setup.py py2app
+
+      # Zip before uploading: upload-artifact flattens the .app bundle and
+      # drops the executable bit, so an uploaded raw .app won't launch.
+      # The bundle name is resolved rather than hardcoded -- py2app derives
+      # it from the entry script, so it depends on whether the `name=` in
+      # py2app_setup.py wins over the launcher.py filename.
+      - name: Zip the .app bundle
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find dist -maxdepth 1 -name '*.app' -print -quit)"
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle produced in dist/"; ls -la dist; exit 1
+          fi
+          echo "Found bundle: $APP_PATH"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "dist/AirportFreqProgrammer-macos.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AirportFreqProgrammer-macos
+          path: dist/AirportFreqProgrammer-macos.zip
+          if-no-files-found: error

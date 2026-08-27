@@ -8,13 +8,23 @@ dependencies = [
     "beautifulsoup4>=4.12",
     "fastapi>=0.110",
     "uvicorn>=0.29",
+    "platformdirs>=4.0",
+    "pywebview>=5.0",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "httpx>=0.27"]
+# Build backends are platform-specific: PyInstaller produces the Windows
+# .exe, py2app the macOS .app. Kept out of `dev` so a plain dev install
+# doesn't drag in a toolchain that only works on one OS.
+build-windows = ["pyinstaller>=6.0"]
+build-macos = ["py2app>=0.28"]
 
 [project.scripts]
 afp = "afp.cli:main"
+
+[project.gui-scripts]
+afp-desktop = "afp.desktop:main"
 
 [build-system]
 requires = ["setuptools>=61.0"]
@@ -22,6 +32,14 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# The web UI's assets are data, not modules, so setuptools won't pick them
+# up on its own. Without this a non-editable `pip install .` yields a
+# package whose static/ directory simply isn't there, and create_app()
+# raises at import time ("Directory ... does not exist"). Editable
+# installs mask the problem by pointing back at the source tree.
+[tool.setuptools.package-data]
+"afp.web" = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
