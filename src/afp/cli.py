@@ -188,7 +188,9 @@ def main(argv: list[str] | None = None) -> int:
     query_parser.add_argument("--ils-system-type", action="append", help="repeatable, e.g. ILS, LOC")
     query_parser.add_argument(
         "--radius", action="append", type=_parse_radius_arg, metavar="CENTER:NM:MODE",
-        help="CENTER is an airport ID or 'LAT,LON'; MODE is include or exclude; repeatable, all AND together",
+        help="CENTER is an airport ID or 'LAT,LON'; MODE is include or exclude; repeatable -- "
+        "multiple includes OR together (near any of them), multiple excludes AND together "
+        "(away from all of them), and the two groups AND with each other",
     )
     query_parser.add_argument("--include-private", action="store_true")
     query_parser.add_argument("--exclude-public", action="store_true")
