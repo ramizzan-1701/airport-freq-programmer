@@ -18,7 +18,27 @@ The built app is unsigned: Gatekeeper blocks it on first open until the
 user right-click > Open, or it's signed with a paid Apple Developer ID.
 """
 
-from setuptools import setup
+from setuptools import Distribution, setup
+
+
+class Py2appDistribution(Distribution):
+    """Drops install_requires before py2app ever sees it.
+
+    This script runs from the repo root, so setuptools finds the
+    pyproject.toml sitting there and injects its [project].dependencies
+    as install_requires. py2app rejects that outright ("install_requires
+    is no longer supported", build_app.py) and the build dies before it
+    starts -- even though nothing here asked for dependency handling.
+
+    parse_config_files is where setuptools applies pyproject.toml, so
+    clearing the field immediately afterwards removes it without
+    touching the real dependency list, which stays in pyproject.toml as
+    the single source of truth for actually installing the package.
+    """
+
+    def parse_config_files(self, *args, **kwargs):
+        super().parse_config_files(*args, **kwargs)
+        self.install_requires = None
 
 # launcher.py, not src/afp/desktop.py directly: py2app runs the entry
 # script as __main__, which breaks afp.desktop's relative imports.
@@ -71,4 +91,5 @@ setup(
     data_files=DATA_FILES,
     options={"py2app": OPTIONS},
     setup_requires=["py2app"],
+    distclass=Py2appDistribution,
 )

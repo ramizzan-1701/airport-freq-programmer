@@ -995,6 +995,21 @@ function confirmGroupSetupBeforeGenerate() {
 
     appendGroupSetupInstructions(box);
 
+    // Opt-out, not auto-dismiss: the gate keeps appearing until the user
+    // deliberately says they're done with it. The instructions stay
+    // reachable from the topbar's "Group setup instructions" button, so
+    // dismissing this loses nothing.
+    const suppressRow = document.createElement("div");
+    suppressRow.className = "checkbox-row";
+    const suppressCb = document.createElement("input");
+    suppressCb.type = "checkbox";
+    suppressCb.id = "suppress-group-setup-gate";
+    const suppressLabel = document.createElement("label");
+    suppressLabel.htmlFor = suppressCb.id;
+    suppressLabel.append(suppressCb, document.createTextNode(" Don't show this message again"));
+    suppressRow.appendChild(suppressLabel);
+    box.appendChild(suppressRow);
+
     let settled = false;
     const finish = (proceed) => {
       if (settled) return; // guard against a double-fire resolving twice
@@ -1019,15 +1034,14 @@ function confirmGroupSetupBeforeGenerate() {
     const proceedBtn = document.createElement("button");
     proceedBtn.className = "btn btn-primary";
     proceedBtn.textContent = "I Understand. Proceed";
-    proceedBtn.addEventListener("click", async () => {
-      // Records that the user has seen this at least once. Not used to
-      // suppress the gate -- it's a per-export confirmation by design --
-      // but it keeps /api/status's flag meaningful.
-      if (!groupSetupAcknowledged) {
+    proceedBtn.addEventListener("click", () => {
+      // Only persist when the user actually ticked the box. Proceeding
+      // on its own means "yes, this export" -- not "stop asking me".
+      if (suppressCb.checked) {
         groupSetupAcknowledged = true;
         api("/api/group-setup/acknowledge", { method: "POST" }).catch(() => {
-          // A failed acknowledgment must never block the export the user
-          // just asked for; the flag is a convenience, not a gate.
+          // A failed save must never block the export the user just asked
+          // for -- worst case the gate reappears next time.
           groupSetupAcknowledged = false;
         });
       }
@@ -1114,7 +1128,11 @@ document.getElementById("generate-btn").addEventListener("click", async () => {
   const errorsEl = document.getElementById("generate-errors");
   errorsEl.classList.add("hidden");
 
-  if (!(await confirmGroupSetupBeforeGenerate())) return; // cancelled
+  // Skipped once the user has ticked "Don't show this message again";
+  // the instructions stay available from the topbar button.
+  if (!groupSetupAcknowledged && !(await confirmGroupSetupBeforeGenerate())) {
+    return; // cancelled
+  }
 
   btn.disabled = true;
   try {
