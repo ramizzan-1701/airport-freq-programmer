@@ -70,7 +70,11 @@ def test_fetch_current_cycle_downloads_and_extracts_each_category(
     monkeypatch.setattr(downloader_module, "extract_csv", fake_extract_csv)
 
     src = NASRSource(cache_dir=tmp_path)
-    result = src.fetch_current_cycle()
+    # Pinned like every other test here: without it this asserted against
+    # whatever cycle the fixture page considered current on the day the
+    # suite happened to run, and started failing on its own once real time
+    # moved past the next cycle's effective date.
+    result = src.fetch_current_cycle(today=date(2026, 8, 16))
 
     assert result.cycle.effective_date == date(2026, 8, 6)
     assert result.apt_base_csv.name == "APT_BASE.csv"
