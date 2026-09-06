@@ -82,7 +82,7 @@ async function init() {
   checkForUpdate();
 
   document.getElementById("fetch-btn").addEventListener("click", doFetch);
-  document.getElementById("group-setup-link").addEventListener("click", () => showGroupSetupModal(false));
+  document.getElementById("group-setup-link").addEventListener("click", () => showGroupSetupModal());
   document.getElementById("custom-import-input").addEventListener("change", (e) => {
     const file = e.target.files[0];
     if (file) importCustomEntriesFile(file);
@@ -918,15 +918,12 @@ function showBlockedImportModal({ groups, found, available }) {
   modal.classList.remove("hidden");
 }
 
-function showGroupSetupModal(isAutoPrompt) {
-  const modal = document.getElementById("group-setup-modal");
-  const box = modal.querySelector(".modal-box");
-  box.innerHTML = "";
-
-  const h2 = document.createElement("h2");
-  h2.textContent = "Rename your memory groups first";
-  box.appendChild(h2);
-
+/** The group-setup instructions themselves, shared by the topbar's
+ * reference modal and the pre-generate confirmation gate. Kept in one
+ * place deliberately: two copies of this text would drift, and the whole
+ * point of the confirmation is that it says the same thing.
+ */
+function appendGroupSetupInstructions(box) {
   const p1 = document.createElement("p");
   p1.textContent = "YCE-64 can't create new groups -- it only has 9 fixed slots (GROUP1-GROUP9) that you rename. If a group name in the XML doesn't already exist in YCE-64, that entry's grouping is silently dropped.";
   box.appendChild(p1);
@@ -943,29 +940,121 @@ function showGroupSetupModal(isAutoPrompt) {
     list.appendChild(li);
   }
   box.appendChild(list);
+}
+
+function copyNamesButton() {
+  const btn = document.createElement("button");
+  btn.className = "btn";
+  btn.textContent = "Copy names";
+  btn.addEventListener("click", () => {
+    navigator.clipboard?.writeText(fixedGroupNames.join(", "));
+  });
+  return btn;
+}
+
+/** Reference view, opened from the topbar link -- read-only, no gate. */
+function showGroupSetupModal() {
+  const modal = document.getElementById("group-setup-modal");
+  const box = modal.querySelector(".modal-box");
+  box.innerHTML = "";
+
+  const h2 = document.createElement("h2");
+  h2.textContent = "Rename your memory groups first";
+  box.appendChild(h2);
+
+  appendGroupSetupInstructions(box);
 
   const actionsRow = document.createElement("div");
   actionsRow.className = "modal-actions";
-  const copyBtn = document.createElement("button");
-  copyBtn.className = "btn";
-  copyBtn.textContent = "Copy names";
-  copyBtn.addEventListener("click", () => {
-    navigator.clipboard?.writeText(fixedGroupNames.join(", "));
-  });
-  const continueBtn = document.createElement("button");
-  continueBtn.className = "btn btn-primary";
-  continueBtn.textContent = isAutoPrompt ? "I've renamed my groups -- Continue" : "Close";
-  continueBtn.addEventListener("click", async () => {
-    if (!groupSetupAcknowledged) {
-      await api("/api/group-setup/acknowledge", { method: "POST" });
-      groupSetupAcknowledged = true;
-    }
-    modal.classList.add("hidden");
-  });
-  actionsRow.append(copyBtn, continueBtn);
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "btn btn-primary";
+  closeBtn.textContent = "Close";
+  closeBtn.addEventListener("click", () => modal.classList.add("hidden"));
+  actionsRow.append(copyNamesButton(), closeBtn);
   box.appendChild(actionsRow);
 
   modal.classList.remove("hidden");
+}
+
+/** Confirmation gate shown when "Generate XML" is clicked. Resolves true
+ * to proceed with generation, false if the user cancels.
+ *
+ * This runs before generating rather than after downloading: renaming the
+ * groups is a prerequisite for the file to import correctly, and getting
+ * the reminder after the file is already saved is too late to act on.
+ */
+function confirmGroupSetupBeforeGenerate() {
+  return new Promise((resolve) => {
+    const modal = document.getElementById("generate-confirm-modal");
+    const box = modal.querySelector(".modal-box");
+    box.innerHTML = "";
+
+    const h2 = document.createElement("h2");
+    h2.textContent = "Before you generate: check your memory groups";
+    box.appendChild(h2);
+
+    appendGroupSetupInstructions(box);
+
+    // Opt-out, not auto-dismiss: the gate keeps appearing until the user
+    // deliberately says they're done with it. The instructions stay
+    // reachable from the topbar's "Group setup instructions" button, so
+    // dismissing this loses nothing.
+    const suppressRow = document.createElement("div");
+    suppressRow.className = "checkbox-row";
+    const suppressCb = document.createElement("input");
+    suppressCb.type = "checkbox";
+    suppressCb.id = "suppress-group-setup-gate";
+    const suppressLabel = document.createElement("label");
+    suppressLabel.htmlFor = suppressCb.id;
+    suppressLabel.append(suppressCb, document.createTextNode(" Don't show this message again"));
+    suppressRow.appendChild(suppressLabel);
+    box.appendChild(suppressRow);
+
+    let settled = false;
+    const finish = (proceed) => {
+      if (settled) return; // guard against a double-fire resolving twice
+      settled = true;
+      modal.classList.add("hidden");
+      document.removeEventListener("keydown", onKeydown);
+      resolve(proceed);
+    };
+
+    function onKeydown(event) {
+      if (event.key === "Escape") finish(false);
+    }
+
+    const actionsRow = document.createElement("div");
+    actionsRow.className = "modal-actions";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.className = "btn";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", () => finish(false));
+
+    const proceedBtn = document.createElement("button");
+    proceedBtn.className = "btn btn-primary";
+    proceedBtn.textContent = "I Understand. Proceed";
+    proceedBtn.addEventListener("click", () => {
+      // Only persist when the user actually ticked the box. Proceeding
+      // on its own means "yes, this export" -- not "stop asking me".
+      if (suppressCb.checked) {
+        groupSetupAcknowledged = true;
+        api("/api/group-setup/acknowledge", { method: "POST" }).catch(() => {
+          // A failed save must never block the export the user just asked
+          // for -- worst case the gate reappears next time.
+          groupSetupAcknowledged = false;
+        });
+      }
+      finish(true);
+    });
+
+    actionsRow.append(copyNamesButton(), cancelBtn, proceedBtn);
+    box.appendChild(actionsRow);
+
+    document.addEventListener("keydown", onKeydown);
+    modal.classList.remove("hidden");
+    proceedBtn.focus();
+  });
 }
 
 // ---------- query + results ----------
@@ -1038,6 +1127,13 @@ document.getElementById("generate-btn").addEventListener("click", async () => {
   const btn = document.getElementById("generate-btn");
   const errorsEl = document.getElementById("generate-errors");
   errorsEl.classList.add("hidden");
+
+  // Skipped once the user has ticked "Don't show this message again";
+  // the instructions stay available from the topbar button.
+  if (!groupSetupAcknowledged && !(await confirmGroupSetupBeforeGenerate())) {
+    return; // cancelled
+  }
+
   btn.disabled = true;
   try {
     const res = await api("/api/generate", { method: "POST", body: JSON.stringify(buildFilterPayload()) });
@@ -1068,8 +1164,6 @@ document.getElementById("generate-btn").addEventListener("click", async () => {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-
-    if (!groupSetupAcknowledged) showGroupSetupModal(true);
   } finally {
     btn.disabled = lastQueryResult ? lastQueryResult.level === "red" || lastQueryResult.total_count === 0 : false;
   }

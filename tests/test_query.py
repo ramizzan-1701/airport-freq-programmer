@@ -268,8 +268,10 @@ def test_radius_exclude_filter(conn):
     assert _ids(result) == {"BBB", "CCC"}
 
 
-def test_multiple_radius_filters_and_together(conn):
-    # exclude near AAA AND exclude near BBB -> only CCC survives
+def test_multiple_exclude_radius_filters_and_together(conn):
+    # exclude near AAA AND exclude near BBB -> only CCC survives.
+    # Excludes must AND: "not near either one". OR-ing them would let each
+    # new exclusion cancel the previous one out.
     result = apply_filters(
         conn,
         FilterState(
@@ -280,6 +282,46 @@ def test_multiple_radius_filters_and_together(conn):
         ),
     )
     assert _ids(result) == {"CCC"}
+
+
+def test_multiple_include_radius_filters_or_together(conn):
+    """Two include radii mean "near either center", not "near both".
+
+    AAA and BBB are ~300nm apart, so AND-ing these (the original
+    behaviour) returned nothing at all -- adding a second include radius
+    silently zeroed the results instead of widening them.
+    """
+    result = apply_filters(
+        conn,
+        FilterState(
+            radius_filters=(
+                RadiusFilter(center_lat=34.0, center_lon=-118.0, radius_nm=5, mode="include"),
+                RadiusFilter(center_lat=37.0, center_lon=-122.0, radius_nm=5, mode="include"),
+            )
+        ),
+    )
+    # CCC (Las Vegas) is outside both circles. DDD sits within 5nm of
+    # AAA's center but is private-use, which FilterState excludes by
+    # default -- unrelated to radius, but it keeps this set to two.
+    assert _ids(result) == {"AAA", "BBB"}
+
+
+def test_include_radius_union_still_respects_excludes(conn):
+    """The include group and the exclude group AND with each other:
+    inside any include zone, and outside every exclude zone.
+    """
+    result = apply_filters(
+        conn,
+        FilterState(
+            radius_filters=(
+                RadiusFilter(center_lat=34.0, center_lon=-118.0, radius_nm=5, mode="include"),
+                RadiusFilter(center_lat=37.0, center_lon=-122.0, radius_nm=5, mode="include"),
+                # carve AAA (and its close neighbour DDD) back out
+                RadiusFilter(center_lat=34.0, center_lon=-118.0, radius_nm=5, mode="exclude"),
+            )
+        ),
+    )
+    assert _ids(result) == {"BBB"}
 
 
 def test_list_states(conn):
@@ -365,6 +407,25 @@ def test_orphan_facility_filtered_by_its_own_city(orphan_conn):
     result = apply_filters(orphan_conn, FilterState(cities=frozenset({"AVENAL"})))
     freq_airport_ids = {f.airport_id for f in result.frequencies}
     assert freq_airport_ids == {"AVE"}
+
+
+def test_orphan_facilities_honour_include_radius_union(orphan_conn):
+    """Standalone facilities run through a separate WHERE builder with its
+    own NULL-position handling, so the include-radii-OR fix has to hold on
+    that path too -- AVE and XYZ are ~180nm apart and would both drop out
+    if these AND'd.
+    """
+    result = apply_filters(
+        orphan_conn,
+        FilterState(
+            radius_filters=(
+                RadiusFilter(center_lat=35.647, center_lon=-119.979, radius_nm=5, mode="include"),  # AVE
+                RadiusFilter(center_lat=38.0, center_lon=-117.0, radius_nm=5, mode="include"),  # XYZ
+            )
+        ),
+    )
+    freq_airport_ids = {f.airport_id for f in result.frequencies}
+    assert {"AVE", "XYZ"} <= freq_airport_ids
 
 
 def test_orphan_facility_filtered_by_radius_using_its_own_position(orphan_conn):

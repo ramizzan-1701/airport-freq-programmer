@@ -48,8 +48,11 @@ class NASRSource:
         last_processed = cycle_store.load_last_processed(self.cycle_store_path)
         return last_processed is None or current.effective_date > last_processed
 
-    def fetch_current_cycle(self) -> FetchResult:
-        cycle = self.get_current_cycle()
+    def fetch_current_cycle(self, today: date | None = None) -> FetchResult:
+        # `today` is injectable for the same reason get_current_cycle's is:
+        # which cycle counts as current depends on the date, so a test that
+        # can't pin it silently changes meaning as real time passes.
+        cycle = self.get_current_cycle(today=today)
         subpage_html = scraper.fetch(cycle.subpage_url)
         links = scraper.parse_cycle_csv_links(subpage_html)
 

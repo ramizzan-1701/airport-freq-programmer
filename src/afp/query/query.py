@@ -36,6 +36,57 @@ def _in_clause(column: str, values) -> tuple[str, list]:
     return f"{column} IN ({placeholders})", values
 
 
+def _radius_clauses(
+    filters: FilterState, *, include_template: str, exclude_template: str
+) -> tuple[str, list]:
+    """Combine the radius filters into a single WHERE fragment.
+
+    Multiple "include" radii are OR'd: asking for LAX+60nm and SFO+60nm
+    means "near either one", the same way listing two states means either
+    state. AND-ing them (the original behaviour) asked for points within
+    60nm of *both* centers, which for any two airports further apart than
+    their combined radii is empty -- so a second include radius silently
+    zeroed the results instead of widening them.
+
+    Multiple "exclude" radii stay AND'd, which is what "not near X and
+    also not near Y" already means -- OR-ing those would make each new
+    exclusion cancel the previous one out.
+
+    The two groups are then AND'd together: inside any include zone, and
+    outside every exclude zone.
+
+    Templates are passed in because airports and standalone facilities
+    read position from different columns and differ on NULL handling.
+    """
+    include_parts: list[str] = []
+    include_params: list = []
+    exclude_parts: list[str] = []
+    exclude_params: list = []
+
+    for radius in filters.radius_filters:
+        args = [radius.center_lat, radius.center_lon, radius.radius_nm]
+        if radius.mode == "include":
+            include_parts.append(include_template)
+            include_params += args
+        else:
+            exclude_parts.append(exclude_template)
+            exclude_params += args
+
+    clauses: list[str] = []
+    params: list = []
+    # Params must be appended in the same order the clauses are joined,
+    # not in the order the filters were declared, or the placeholders bind
+    # to the wrong values once includes and excludes are interleaved.
+    if include_parts:
+        clauses.append("(" + " OR ".join(include_parts) + ")")
+        params += include_params
+    if exclude_parts:
+        clauses.append("(" + " AND ".join(exclude_parts) + ")")
+        params += exclude_params
+
+    return " AND ".join(clauses), params
+
+
 def _airport_where(filters: FilterState) -> tuple[str, list]:
     clauses: list[str] = []
     params: list = []
@@ -57,10 +108,14 @@ def _airport_where(filters: FilterState) -> tuple[str, list]:
         clauses.append(clause)
         params += p
 
-    for radius in filters.radius_filters:
-        op = "<=" if radius.mode == "include" else ">"
-        clauses.append(f"haversine_nm(lat, lon, ?, ?) {op} ?")
-        params += [radius.center_lat, radius.center_lon, radius.radius_nm]
+    radius_clause, radius_params = _radius_clauses(
+        filters,
+        include_template="haversine_nm(lat, lon, ?, ?) <= ?",
+        exclude_template="haversine_nm(lat, lon, ?, ?) > ?",
+    )
+    if radius_clause:
+        clauses.append(radius_clause)
+        params += radius_params
 
     return (" AND ".join(clauses) if clauses else "1"), params
 
@@ -124,22 +179,24 @@ def _orphan_frequency_where(filters: FilterState) -> tuple[str, list]:
         clauses.append(clause)
         params += p
 
-    for radius in filters.radius_filters:
-        # Unlike airports, standalone facilities' own lat/lon (FRQ.csv's
-        # LAT_DECIMAL/LONG_DECIMAL) isn't guaranteed present -- real data
-        # has rows (e.g. some TRACON/APCH_DEP facilities) that report a
-        # frequency but no position at all. haversine_nm() has no NULL
-        # handling and previously crashed the whole query (sqlite raises
-        # "user-defined function raised exception") the moment any radius
-        # filter touched one of these rows. A row with no known position
-        # can't be confirmed inside a radius, so: excluded under "include"
-        # (fails the distance check), kept under "exclude" (never
-        # confirmed to be in the exclusion zone, so not safe to drop).
-        if radius.mode == "include":
-            clauses.append("(lat IS NOT NULL AND lon IS NOT NULL AND haversine_nm(lat, lon, ?, ?) <= ?)")
-        else:
-            clauses.append("(lat IS NULL OR lon IS NULL OR haversine_nm(lat, lon, ?, ?) > ?)")
-        params += [radius.center_lat, radius.center_lon, radius.radius_nm]
+    # Unlike airports, standalone facilities' own lat/lon (FRQ.csv's
+    # LAT_DECIMAL/LONG_DECIMAL) isn't guaranteed present -- real data has
+    # rows (e.g. some TRACON/APCH_DEP facilities) that report a frequency
+    # but no position at all. haversine_nm() has no NULL handling and
+    # previously crashed the whole query (sqlite raises "user-defined
+    # function raised exception") the moment any radius filter touched one
+    # of these rows. A row with no known position can't be confirmed
+    # inside a radius, so: excluded under "include" (fails the distance
+    # check), kept under "exclude" (never confirmed to be in the exclusion
+    # zone, so not safe to drop).
+    radius_clause, radius_params = _radius_clauses(
+        filters,
+        include_template="(lat IS NOT NULL AND lon IS NOT NULL AND haversine_nm(lat, lon, ?, ?) <= ?)",
+        exclude_template="(lat IS NULL OR lon IS NULL OR haversine_nm(lat, lon, ?, ?) > ?)",
+    )
+    if radius_clause:
+        clauses.append(radius_clause)
+        params += radius_params
 
     return (" AND ".join(clauses) if clauses else "1"), params
 
