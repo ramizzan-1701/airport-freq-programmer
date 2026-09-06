@@ -50,6 +50,12 @@ a = Analysis(
         "uvicorn.lifespan.off",
         "uvicorn.loops.asyncio",
         "uvicorn.logging",
+        # anyio picks its backend via import_module() at runtime. A bundled
+        # PyInstaller hook currently covers this, so Windows builds work
+        # without it -- listed anyway so the build doesn't quietly start
+        # failing if that hook ever goes away. It broke the macOS bundle,
+        # which has no equivalent hook.
+        "anyio._backends._asyncio",
         *webview_hiddenimports,
     ],
     hookspath=[],

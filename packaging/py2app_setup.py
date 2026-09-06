@@ -60,15 +60,28 @@ DATA_FILES = [
 ]
 
 OPTIONS = {
-    "packages": ["afp", "uvicorn", "fastapi", "starlette", "pydantic", "webview", "requests", "bs4"],
-    # uvicorn resolves its protocol/loop/lifespan classes from strings at
-    # runtime, so static analysis can't see them. Without these the bundle
-    # builds cleanly and then dies on launch with an import error.
+    # anyio is listed as a whole package on purpose: it picks its backend
+    # with import_module(f"anyio._backends._{name}") at runtime, so the
+    # dependency graph shows nothing and py2app shipped anyio without
+    # anyio/_backends/. The app then launched fine and 500'd on the first
+    # request ("No module named 'anyio._backends'"), since Starlette's
+    # BaseHTTPMiddleware builds an anyio primitive per request. Naming the
+    # package rather than the one submodule keeps this fixed if anyio
+    # rearranges its backends.
+    "packages": [
+        "afp", "uvicorn", "fastapi", "starlette", "pydantic", "webview",
+        "requests", "bs4", "anyio",
+    ],
+    # Same runtime-string-import problem, module by module: uvicorn
+    # resolves its protocol/loop/lifespan classes from strings, so static
+    # analysis can't see them. Without these the bundle builds cleanly and
+    # then dies on launch.
     "includes": [
         "uvicorn.protocols.http.h11_impl",
         "uvicorn.protocols.websockets.websockets_impl",
         "uvicorn.lifespan.on",
         "uvicorn.loops.asyncio",
+        "anyio._backends._asyncio",
     ],
     "excludes": ["tkinter", "pytest"],
     "plist": {

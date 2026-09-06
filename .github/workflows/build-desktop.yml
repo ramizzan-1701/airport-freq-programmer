@@ -78,6 +78,35 @@ jobs:
       - name: Build
         run: python packaging/py2app_setup.py py2app
 
+      # "It built" and "it runs" are different claims here. Twice now a
+      # module resolved by string at runtime (uvicorn's protocols, then
+      # anyio's backend) was invisible to the dependency graph, so the
+      # bundle built clean and then failed on the first real request.
+      # These are exactly the modules nothing statically imports, so
+      # nothing but an explicit check will notice they're missing.
+      - name: Verify runtime-imported modules were bundled
+        run: |
+          set -euo pipefail
+          APP="$(find dist -maxdepth 1 -name '*.app' -print -quit)"
+          LIB="$APP/Contents/Resources/lib/python3.12"
+          status=0
+          for path in \
+            "anyio/_backends/_asyncio.py" \
+            "uvicorn/protocols/http/h11_impl.py" \
+            "uvicorn/lifespan/on.py" \
+            "uvicorn/loops/asyncio.py" \
+            "afp/web/static/index.html" \
+            "afp/web/static/app.js" \
+            "afp/web/static/style.css"
+          do
+            if [ -e "$LIB/$path" ]; then
+              echo "ok      $path"
+            else
+              echo "MISSING $path"; status=1
+            fi
+          done
+          exit $status
+
       # Zip before uploading: upload-artifact flattens the .app bundle and
       # drops the executable bit, so an uploaded raw .app won't launch.
       # The bundle name is resolved rather than hardcoded -- py2app derives
