@@ -120,18 +120,16 @@ def _airport_where(filters: FilterState) -> tuple[str, list]:
     return (" AND ".join(clauses) if clauses else "1"), params
 
 
-def _frequency_where(filters: FilterState) -> tuple[str, list]:
+def _site_and_status_clauses(filters: FilterState) -> tuple[str, list]:
+    """The platform_type / facility_status conditions, as they apply to a
+    row of the frequencies table.
+
+    Shared with the ILS query, which has no such columns of its own -- see
+    _ils_airport_clause.
+    """
     clauses: list[str] = []
     params: list = []
 
-    if filters.freq_categories:
-        clause, p = _in_clause("freq_category", filters.freq_categories)
-        clauses.append(clause)
-        params += p
-    if filters.weather_subtypes:
-        clause, p = _in_clause("weather_subtype", filters.weather_subtypes)
-        clauses.append(clause)
-        params += p
     if filters.platform_types:
         clause, p = _in_clause("platform_type", filters.platform_types)
         # platform_type is None for every row that isn't a landing-platform
@@ -151,6 +149,47 @@ def _frequency_where(filters: FilterState) -> tuple[str, list]:
             clause = f"({clause} OR facility_status IS NULL)"
         clauses.append(clause)
         params += p
+
+    return " AND ".join(clauses), params
+
+
+def _ils_airport_clause(filters: FilterState) -> tuple[str, list]:
+    """Restrict ILS records to airports that satisfy the site-type and
+    facility-status filters.
+
+    Those two describe the airport, but the schema carries them on its
+    frequency rows -- the ils table has neither. Filtering ILS by airport
+    id alone therefore ignored both completely: asking for CA + ILS +
+    NON_TOWERED returned SJC, SMF, LAX and every other towered field in
+    the state, because the only thing narrowing ILS was the airport's
+    state.
+
+    An airport qualifies when at least one of its frequency rows matches,
+    which is how the same filters already decide whether to keep that
+    airport's comm frequencies.
+    """
+    inner, params = _site_and_status_clauses(filters)
+    if not inner:
+        return "1", []
+    return f"airport_id IN (SELECT airport_id FROM frequencies WHERE {inner})", params
+
+
+def _frequency_where(filters: FilterState) -> tuple[str, list]:
+    clauses: list[str] = []
+    params: list = []
+
+    if filters.freq_categories:
+        clause, p = _in_clause("freq_category", filters.freq_categories)
+        clauses.append(clause)
+        params += p
+    if filters.weather_subtypes:
+        clause, p = _in_clause("weather_subtype", filters.weather_subtypes)
+        clauses.append(clause)
+        params += p
+    site_clause, site_params = _site_and_status_clauses(filters)
+    if site_clause:
+        clauses.append(site_clause)
+        params += site_params
     if filters.primary_approach_radio_calls:
         clause, p = _in_clause("primary_approach_radio_call", filters.primary_approach_radio_calls)
         clauses.append(clause)
@@ -275,10 +314,11 @@ def apply_filters(conn: sqlite3.Connection, filters: FilterState) -> NormalizedD
 
         if filters.should_include_ils:
             ils_where, ils_params = _ils_where(filters)
+            airport_clause, airport_params = _ils_airport_clause(filters)
             ils_rows = conn.execute(
                 f"SELECT airport_id, runway_end_id, freq_mhz, system_type, component_status "
-                f"FROM ils WHERE {id_clause} AND {ils_where}",
-                id_params + ils_params,
+                f"FROM ils WHERE {id_clause} AND {ils_where} AND {airport_clause}",
+                id_params + ils_params + airport_params,
             ).fetchall()
             ils = [
                 Ils(airport_id=r[0], runway_end_id=r[1], freq_mhz=r[2], system_type=r[3], component_status=r[4])

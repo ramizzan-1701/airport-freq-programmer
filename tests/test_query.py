@@ -493,3 +493,88 @@ def test_list_states_includes_orphan_only_states(orphan_conn):
 def test_list_cities_includes_orphan_only_cities(orphan_conn):
     assert set(list_cities(orphan_conn)) == {"LOS ANGELES", "AVENAL", "TONOPAH"}
     assert set(list_cities(orphan_conn, states=frozenset({"NV"}))) == {"TONOPAH"}
+
+
+# ---------- ILS records vs. the site/status filters ----------
+
+
+@pytest.fixture
+def ils_status_conn():
+    """A towered airport and a non-towered one, each with an ILS.
+
+    platform_type and facility_status describe the airport but live on
+    its frequency rows; the ils table has neither, so these filters used
+    to pass straight over ILS records.
+    """
+    data = NormalizedData(
+        airports=[
+            Airport(id="TWR", name="Towered", city="X", state="CA", lat=34.0, lon=-118.0, public_use=True),
+            Airport(id="NON", name="Non-towered", city="X", state="CA", lat=34.1, lon=-118.1, public_use=True),
+        ],
+        frequencies=[
+            Frequency(airport_id="TWR", freq_mhz=118.0, freq_category="TOWER",
+                      platform_type="AIRPORT", facility_status="TOWERED"),
+            Frequency(airport_id="NON", freq_mhz=122.8, freq_category="CTAF",
+                      platform_type="AIRPORT", facility_status="NON_TOWERED"),
+        ],
+        ils=[
+            Ils(airport_id="TWR", runway_end_id="09", freq_mhz=110.3,
+                system_type="LS", component_status="OPERATIONAL IFR"),
+            Ils(airport_id="NON", runway_end_id="27", freq_mhz=111.5,
+                system_type="LS", component_status="OPERATIONAL IFR"),
+        ],
+    )
+    return build_database(data)
+
+
+def _ils_airports(result):
+    return {i.airport_id for i in result.ils}
+
+
+def test_facility_status_filter_applies_to_ils_records(ils_status_conn):
+    """Real bug report: CA + ILS/Localizer + Non-Towered returned SJC,
+    SMF, LAX and every other towered field in the state, because the only
+    thing narrowing the ILS query was the airport's state.
+    """
+    non_towered = apply_filters(
+        ils_status_conn, FilterState(facility_statuses=frozenset({"NON_TOWERED"}))
+    )
+    assert _ils_airports(non_towered) == {"NON"}
+
+    towered = apply_filters(
+        ils_status_conn, FilterState(facility_statuses=frozenset({"TOWERED"}))
+    )
+    assert _ils_airports(towered) == {"TWR"}
+
+
+def test_platform_type_filter_applies_to_ils_records(ils_status_conn):
+    """Same hole, the other column."""
+    result = apply_filters(
+        ils_status_conn, FilterState(platform_types=frozenset({"HELIPORT"}))
+    )
+    assert _ils_airports(result) == set()
+
+
+def test_unfiltered_status_still_returns_every_ils_record(ils_status_conn):
+    result = apply_filters(ils_status_conn, FilterState())
+    assert _ils_airports(result) == {"TWR", "NON"}
+
+
+def test_ils_kept_when_any_row_at_that_airport_matches_the_status():
+    """A part-time tower (Visalia, and 1,044 other airports in the
+    2026-09-03 cycle) publishes both TOWERED and NON_TOWERED rows. Its
+    ILS belongs to both sets, the same way its frequencies already do.
+    """
+    data = NormalizedData(
+        airports=[Airport(id="VIS", name="Visalia", city="X", state="CA", lat=36.3, lon=-119.4, public_use=True)],
+        frequencies=[
+            Frequency(airport_id="VIS", freq_mhz=118.5, freq_category="APCH_DEP", facility_status="TOWERED"),
+            Frequency(airport_id="VIS", freq_mhz=123.05, freq_category="CTAF", facility_status="NON_TOWERED"),
+        ],
+        ils=[Ils(airport_id="VIS", runway_end_id="30", freq_mhz=110.3,
+                 system_type="LS", component_status="OPERATIONAL IFR")],
+    )
+    conn = build_database(data)
+    for status in ("TOWERED", "NON_TOWERED"):
+        result = apply_filters(conn, FilterState(facility_statuses=frozenset({status})))
+        assert _ils_airports(result) == {"VIS"}, status
