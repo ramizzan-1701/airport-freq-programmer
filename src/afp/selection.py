@@ -195,11 +195,149 @@ def _sanitize(component: str) -> str:
     return re.sub(r"[^A-Z0-9]", "", component.upper())
 
 
-def _tag_suffix(f: Frequency) -> str:
+def _procedure_fix_suffix(raw_freq_use: str | None) -> str:
+    """"DNKIN RNAV STAR" -> "STAR"; "TRUKN TWO DP" -> "DP".
+
+    The procedure's own name leads every one of these values, but it's
+    the kind of thing the radio's frequency display already identifies,
+    and carrying it made tags like CYXX-MADEERNAVSTAR (18 chars) that
+    blow past the 14-char cap and block the whole export. The "RNAV"/
+    "RNV" variants are noise for this purpose too -- what's worth
+    keeping is only whether it's an arrival or a departure.
+
+    Confirmed against the 2026-09-03 cycle: all 2131 rows end in either
+    STAR (1128) or DP (1003), the only two procedure types the FAA
+    publishes here. Anything else falls back to the old raw-text
+    behaviour rather than being silently mislabelled as one of them.
+    """
+    tokens = (raw_freq_use or "").strip().upper().split()
+    if tokens and tokens[-1] in ("STAR", "DP"):
+        return tokens[-1]
+    return _sanitize(raw_freq_use)
+
+
+def _apch_dep_suffix(raw_freq_use: str | None) -> str:
+    """"APCH/P DEP/P IC" -> "APCHDEP"; "DEP/S" -> "DEP"; "APCH/P" -> "APCH".
+
+    Every one of the 13 distinct values in the 2026-09-03 cycle is built
+    from APCH and/or DEP plus a /P (primary) or /S (secondary) marker and
+    an optional IC. The markers don't survive: they pushed tags to
+    APCHPDEPPIC (11 chars, 16 with an airport ID) and aren't a
+    distinction worth the length. Whether the frequency is an arrival, a
+    departure, or both is kept -- 532 rows are approach-only and 381
+    departure-only nationwide, so collapsing all three to one label would
+    put a departure tag on an approach-only frequency.
+    """
+    text = (raw_freq_use or "").upper()
+    has_apch = "APCH" in text
+    has_dep = "DEP" in text or "DE/P" in text  # "DE/P" is a real typo in FAA data
+    if has_apch and has_dep:
+        return "APCHDEP"
+    if has_apch:
+        return "APCH"
+    if has_dep:
+        return "DEP"
+    return _sanitize(raw_freq_use)
+
+
+# The radio's tag cap. Duplicated from ExportProfile rather than imported
+# because selection stays independent of any one export profile (see the
+# module docstring) -- the same reasoning _ORPHAN_ID_MAX_LEN already
+# relies on. Export-time validation remains the real enforcement.
+_TAG_LEN_BUDGET = 14
+
+# Fallback when the prefix isn't known: the tightest case, a 6-char
+# abbreviated orphan ID. 6 + "-" + 6 + one char for _unique_tag's
+# numeric disambiguator == 14.
+_MAX_SUFFIX_LEN = 6
+
+
+def _suffix_budget(prefix: str) -> int:
+    """Chars available for the suffix given this tag's actual prefix.
+
+    Budgeting against the real prefix rather than the worst case matters:
+    a 4-char LID leaves 8, and forcing everything down to the 6 that a
+    long orphan ID would need turns perfectly valid suffixes like
+    ARNGOPS into ARNGO for no reason.
+
+    One char is held back for _unique_tag's numeric disambiguator, since
+    a second frequency in the same category at the same airport appends
+    a digit after the fact.
+    """
+    return max(1, _TAG_LEN_BUDGET - len(prefix) - 1 - 1)
+
+# Multi-word phrases that recur in FAA free text and have an obvious
+# short form. Applied before the generic abbreviator below, which would
+# otherwise turn "COMD POST" into something less recognisable.
+_SUFFIX_PHRASES = (
+    ("COMD POST", "CP"),
+    ("VFR SEQUENCING", "VFRSEQ"),
+    ("AIRSPACE ATIS", "ATIS"),
+)
+
+
+def _shorten_suffix(raw_freq_use: str | None, max_len: int = _MAX_SUFFIX_LEN) -> str:
+    """Sanitize a raw FREQ_USE into a tag suffix that can't overflow.
+
+    Known phrases are rewritten first ("ANG COMD POST" -> "ANGCP"), then
+    anything still too long is abbreviated the same way facility IDs are
+    -- first word's lead plus each later word's initial -- rather than
+    blindly truncated, so "MAINT CTL CENTER" reads as MAINCC instead of
+    MAINTC.
+
+    The point is that no FAA value, including ones a future cycle
+    introduces, can produce a tag that fails validation and blocks the
+    entire export.
+    """
+    text = (raw_freq_use or "").upper()
+    for phrase, short in _SUFFIX_PHRASES:
+        if phrase in text:
+            text = text.replace(phrase, short)
+    sanitized = _sanitize(text)
+    if len(sanitized) <= max_len:
+        return sanitized
+
+    words = re.findall(r"[A-Z0-9]+", text)
+    if len(words) <= 1:
+        return sanitized[:max_len]
+    first_len = max(1, max_len - (len(words) - 1))
+    abbrev = words[0][:first_len] + "".join(w[0] for w in words[1:])
+    return abbrev[:max_len]
+
+
+def _other_suffix(raw_freq_use: str | None, max_len: int = _MAX_SUFFIX_LEN) -> str:
+    """FAA airport-remark rows ("APT REMARK 100 WITH GCO FREQ") collapse
+    to APTRMK; everything else in OTHER passes through unchanged.
+
+    The remark number and the "WITH <x> FREQ" tail are bookkeeping from
+    the source data rather than anything identifiable in flight, and they
+    produced the longest tags in the whole dataset (up to 29 chars). The
+    other 503 OTHER rows nationwide are already short codes (PTD, GCA,
+    PMSV METRO) that fit fine and are left alone.
+    """
+    if (raw_freq_use or "").strip().upper().startswith("APT REMARK"):
+        return "APTRMK"
+    return _shorten_suffix(raw_freq_use, max_len)
+
+
+def _tag_suffix(f: Frequency, max_len: int = _MAX_SUFFIX_LEN) -> str:
     if f.freq_category == "WEATHER_STATION":
         return f.weather_subtype or "WX"
+    # Checked ahead of _RAW_TEXT_SUFFIX_CATEGORIES, which PROCEDURE_FIX is
+    # still a member of: that set also drives the "shortest raw label
+    # wins" tie-break in _comm_entries, which stays as it was. Only the
+    # tag suffix changes here.
+    if f.freq_category == "PROCEDURE_FIX":
+        return _procedure_fix_suffix(f.raw_freq_use)
+    if f.freq_category == "APCH_DEP":
+        return _apch_dep_suffix(f.raw_freq_use)
+    if f.freq_category == "OTHER":
+        return _other_suffix(f.raw_freq_use, max_len)
+    # MIL_GOV_OPS is the remaining raw-text category: mostly short codes
+    # ("OPS", "ARNG OPS") that pass through untouched, with the command
+    # posts rewritten by _SUFFIX_PHRASES.
     if f.freq_category in _RAW_TEXT_SUFFIX_CATEGORIES:
-        return _sanitize(f.raw_freq_use)
+        return _shorten_suffix(f.raw_freq_use, max_len)
     return _FIXED_TAG_SUFFIXES.get(f.freq_category, _sanitize(f.raw_freq_use))
 
 
@@ -220,7 +358,7 @@ def _unique_tag(base: str, tag_counts: dict[str, int]) -> str:
 
 
 def _make_entry(f: Frequency, airport: Airport, freq_mhz: float, tag_counts: dict[str, int]) -> Entry:
-    base = f"{airport.id}-{_tag_suffix(f)}"
+    base = f"{airport.id}-{_tag_suffix(f, _suffix_budget(airport.id))}"
     return Entry(
         tag_name=_unique_tag(base, tag_counts),
         freq_mhz=freq_mhz,

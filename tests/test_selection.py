@@ -324,10 +324,10 @@ def test_multiple_distinct_frequencies_sharing_a_category_get_numeric_suffix():
     entries = select_entries(data, mode="smart")
     tags = [e.tag_name for e in entries]
 
-    assert tags == ["HWD-APCHS", "HWD-APCHS2", "HWD-APCHS3"]
+    assert tags == ["HWD-APCH", "HWD-APCH2", "HWD-APCH3"]
     assert len(set(tags)) == 3  # no collisions
     freqs_by_tag = {e.tag_name: e.freq_mhz for e in entries}
-    assert freqs_by_tag == {"HWD-APCHS": 125.35, "HWD-APCHS2": 134.50, "HWD-APCHS3": 338.20}
+    assert freqs_by_tag == {"HWD-APCH": 125.35, "HWD-APCH2": 134.50, "HWD-APCH3": 338.20}
 
 
 def test_collapsing_is_scoped_within_a_category_not_globally_by_frequency():
@@ -336,10 +336,12 @@ def test_collapsing_is_scoped_within_a_category_not_globally_by_frequency():
     real Approach/Departure row and an airspace-class annotation. Under
     the category system each classifies differently -- CLASS B is
     non-selectable metadata (produces nothing), DEP/P is its own
-    Approach/Departure entry, and the two STAR/DP-suffixed names collapse
-    into a single Procedure-fix entry (shortest label wins within that
-    category) -- rather than all four being crushed into one entry by
-    raw frequency collapsing alone.
+    Approach/Departure entry, and the two DP-suffixed names collapse
+    into a single Procedure-fix entry -- rather than all four being
+    crushed into one entry by raw frequency collapsing alone.
+
+    The procedure-fix entry is tagged by procedure type ("DP") rather
+    than by name; see _procedure_fix_suffix for why the name is dropped.
     """
     data = NormalizedData(
         airports=[_airport("SFO")],
@@ -354,7 +356,10 @@ def test_collapsing_is_scoped_within_a_category_not_globally_by_frequency():
     entries = select_entries(data, mode="smart")
     tags = {e.tag_name for e in entries}
 
-    assert tags == {"SFO-DEPP", "SFO-SHORELINEDP"}  # shortest label wins within PROCEDURE_FIX
+    # Still two entries, not one: the point of this test. Both DP rows
+    # collapse together, separately from the Approach/Departure row that
+    # shares their frequency.
+    assert tags == {"SFO-DEP", "SFO-DP"}
     assert all(e.freq_mhz == 120.9 for e in entries)
 
 
@@ -404,7 +409,7 @@ def test_numeric_suffix_disambiguation_also_applies_in_raw_mode():
     entries = select_entries(data, mode="raw")
     tags = {e.tag_name for e in entries}
 
-    assert tags == {"HWD-APCHS", "HWD-APCHS2"}
+    assert tags == {"HWD-APCH", "HWD-APCH2"}
 
 
 def test_default_group_buckets_match_ca_scheme():
@@ -503,3 +508,203 @@ def test_orphan_facility_short_id_tag_unaffected_by_abbreviation_scheme():
     )
     entries = select_entries(data, include_public=True, include_private=True)
     assert entries[0].tag_name == "AVE-VOR"
+
+
+# ---------- procedure-fix tag suffixes ----------
+
+
+def test_procedure_fix_tags_use_the_procedure_type_not_its_name():
+    """Real bug: CYXX (Abbotsford) publishes four STAR procedure fixes,
+    which produced tags like CYXX-MADEERNAVSTAR -- 18 chars against the
+    FTA-850L's 14-char cap, failing the whole export rather than just
+    that entry.
+    """
+    data = NormalizedData(
+        airports=[_airport("CYXX")],
+        frequencies=[
+            _freq("CYXX", 118.2, "PROCEDURE_FIX", raw_freq_use="MADEER RNAV STAR"),
+            _freq("CYXX", 120.7, "PROCEDURE_FIX", raw_freq_use="DNKIN RNAV STAR"),
+        ],
+        ils=[],
+    )
+    entries = select_entries(data, include_public=True, include_private=True)
+    tags = {e.tag_name for e in entries}
+
+    assert tags == {"CYXX-STAR", "CYXX-STAR2"}
+    assert all(len(t) <= FTA_850L.max_tag_length for t in tags)
+    assert validate(entries, FTA_850L) == []
+    build_xml(entries, FTA_850L)  # must not raise
+
+
+def test_departure_procedures_are_tagged_dp_not_star():
+    """Half of PROCEDURE_FIX rows nationwide are departures (1003 DP vs
+    1128 STAR, 2026-09-03 cycle) -- tagging those "STAR" would label an
+    arrival procedure on a departure frequency.
+    """
+    data = NormalizedData(
+        airports=[_airport("SFO")],
+        frequencies=[
+            _freq("SFO", 120.9, "PROCEDURE_FIX", raw_freq_use="SHORELINE DP"),
+            _freq("SFO", 121.1, "PROCEDURE_FIX", raw_freq_use="WYLSN RNAV DP"),
+        ],
+        ils=[],
+    )
+    entries = select_entries(data, include_public=True, include_private=True)
+    assert {e.tag_name for e in entries} == {"SFO-DP", "SFO-DP2"}
+
+
+def test_unrecognised_procedure_text_falls_back_to_raw_rather_than_guessing():
+    """A future cycle introducing a third procedure type must not be
+    silently mislabelled as an arrival or a departure.
+    """
+    data = NormalizedData(
+        airports=[_airport("SFO")],
+        frequencies=[_freq("SFO", 120.9, "PROCEDURE_FIX", raw_freq_use="SOMETHING NEW")],
+        ils=[],
+    )
+    entries = select_entries(data, include_public=True, include_private=True)
+    assert entries[0].tag_name == "SFO-SOMETHINGNEW"
+
+
+# ---------- approach/departure and remark tag suffixes ----------
+
+
+def test_apch_dep_suffix_drops_primary_secondary_and_ic_markers():
+    """"APCH/P DEP/P IC" made 16-char tags. The /P, /S and IC markers
+    aren't worth that length; approach-vs-departure is.
+    """
+    data = NormalizedData(
+        airports=[_airport("HWD")],
+        frequencies=[
+            _freq("HWD", 125.35, "APCH_DEP", raw_freq_use="APCH/P DEP/P IC"),
+            _freq("HWD", 134.50, "APCH_DEP", raw_freq_use="APCH/S DEP/S"),
+        ],
+        ils=[],
+    )
+    entries = select_entries(data, include_public=True, include_private=True)
+    assert {e.tag_name for e in entries} == {"HWD-APCHDEP", "HWD-APCHDEP2"}
+    assert validate(entries, FTA_850L) == []
+
+
+def test_approach_only_and_departure_only_keep_that_distinction():
+    """532 rows nationwide are approach-only and 381 departure-only, so
+    labelling everything APCHDEP would tag a departure-only frequency as
+    an approach and vice versa.
+    """
+    data = NormalizedData(
+        airports=[_airport("SFO")],
+        frequencies=[
+            _freq("SFO", 120.5, "APCH_DEP", raw_freq_use="APCH/P"),
+            _freq("SFO", 121.5, "APCH_DEP", raw_freq_use="DEP/S"),
+            _freq("SFO", 122.5, "APCH_DEP", raw_freq_use="APCH/P DEP/P"),
+        ],
+        ils=[],
+    )
+    tags = {e.tag_name for e in select_entries(data, include_public=True, include_private=True)}
+    assert tags == {"SFO-APCH", "SFO-DEP", "SFO-APCHDEP"}
+
+
+def test_airport_remark_rows_collapse_to_aptrmk():
+    """These produced the longest tags in the dataset (up to 29 chars).
+    The remark number and "WITH <x> FREQ" tail are source bookkeeping.
+    """
+    data = NormalizedData(
+        airports=[_airport("BWI")],
+        frequencies=[
+            _freq("BWI", 121.0, "OTHER", raw_freq_use="APT REMARK 39 WITH UNICOM FREQ"),
+            _freq("BWI", 122.0, "OTHER", raw_freq_use="APT REMARK 100 WITH GCO FREQ"),
+        ],
+        ils=[],
+    )
+    entries = select_entries(data, include_public=True, include_private=True)
+    assert {e.tag_name for e in entries} == {"BWI-APTRMK", "BWI-APTRMK2"}
+    assert validate(entries, FTA_850L) == []
+
+
+def test_non_remark_other_rows_are_left_alone():
+    """503 of the 650 OTHER rows are already-short codes that fit fine --
+    only the APT REMARK family needed shortening.
+    """
+    data = NormalizedData(
+        airports=[_airport("XXX")],
+        frequencies=[
+            _freq("XXX", 120.0, "OTHER", raw_freq_use="PTD"),
+            _freq("XXX", 121.0, "OTHER", raw_freq_use="PMSV METRO"),
+        ],
+        ils=[],
+    )
+    tags = {e.tag_name for e in select_entries(data, include_public=True, include_private=True)}
+    assert tags == {"XXX-PTD", "XXX-PMSVMETRO"}
+
+
+# ---------- command posts and the generic length safety net ----------
+
+
+def test_command_post_suffixes_are_shortened_but_keep_the_service():
+    """"ANG COMD POST" made 15-16 char tags. The service (Air National
+    Guard vs Air Force Reserve) is the part worth keeping.
+    """
+    data = NormalizedData(
+        airports=[_airport("DLH"), _airport("SKF")],
+        frequencies=[
+            _freq("DLH", 120.0, "MIL_GOV_OPS", raw_freq_use="ANG COMD POST"),
+            _freq("SKF", 121.0, "MIL_GOV_OPS", raw_freq_use="AFRC COMD POST"),
+        ],
+        ils=[],
+    )
+    tags = {e.tag_name for e in select_entries(data, include_public=True, include_private=True)}
+    assert tags == {"DLH-ANGCP", "SKF-AFRCCP"}
+
+
+def test_short_mil_ops_suffixes_are_not_needlessly_abbreviated():
+    """The suffix budget is computed from the actual prefix, not the
+    worst case -- a 3-char LID leaves 9 chars, so ARNGOPS stays ARNGOPS
+    rather than being cut down to fit a long orphan ID that isn't there.
+    """
+    data = NormalizedData(
+        airports=[_airport("BIS"), _airport("BKT")],
+        frequencies=[
+            _freq("BIS", 120.0, "MIL_GOV_OPS", raw_freq_use="ARNG OPS"),
+            _freq("BKT", 121.0, "MIL_GOV_OPS", raw_freq_use="RANGE CTL"),
+        ],
+        ils=[],
+    )
+    tags = {e.tag_name for e in select_entries(data, include_public=True, include_private=True)}
+    assert tags == {"BIS-ARNGOPS", "BKT-RANGECTL"}
+
+
+def test_unknown_long_raw_text_is_abbreviated_rather_than_overflowing():
+    """The safety net: a value nobody wrote a rule for still has to
+    produce a valid tag instead of failing the whole export.
+    """
+    data = NormalizedData(
+        airports=[_airport("XXX")],
+        frequencies=[
+            _freq("XXX", 120.0, "MIL_GOV_OPS", raw_freq_use="SOME VERY LONG UNANTICIPATED THING"),
+        ],
+        ils=[],
+    )
+    entries = select_entries(data, include_public=True, include_private=True)
+    tag = entries[0].tag_name
+    assert len(tag) <= FTA_850L.max_tag_length
+    assert validate(entries, FTA_850L) == []
+
+
+def test_long_orphan_prefix_still_leaves_room_for_its_suffix():
+    """Tightest case: an abbreviated 6-char orphan ID plus a long raw
+    suffix, where the budget is smallest.
+    """
+    data = NormalizedData(
+        airports=[],
+        frequencies=[
+            Frequency(
+                airport_id="MEDICINE BOW", freq_mhz=120.0, freq_category="MIL_GOV_OPS",
+                raw_freq_use="BASE OPS ADVISORY SVC", state="WY", city="X", name="X",
+                lat=1.0, lon=-1.0,
+            ),
+        ],
+        ils=[],
+    )
+    entries = select_entries(data, include_public=True, include_private=True)
+    assert len(entries[0].tag_name) <= FTA_850L.max_tag_length
+    assert validate(entries, FTA_850L) == []
