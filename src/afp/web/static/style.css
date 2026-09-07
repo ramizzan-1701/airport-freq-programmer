@@ -468,6 +468,16 @@ main#app > .workspace,
    others are sized to their actual content so nothing clips. */
 .radius-form .radius-center { flex: 1 1 auto; min-width: 0; }
 .radius-form .radius-nm { flex: none; width: 46px; }  /* 4 digits is the most anyone needs */
+
+/* No spinner. Nobody nudges a radius one mile at a time, and the arrows
+   eat a third of a field this narrow. Stays type="number" so the numeric
+   keypad and min=0 validation still apply -- only the control is hidden. */
+.radius-form .radius-nm::-webkit-outer-spin-button,
+.radius-form .radius-nm::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.radius-form .radius-nm { -moz-appearance: textfield; appearance: textfield; }
 .radius-form .radius-mode { flex: none; }
 .radius-form .btn { flex: none; padding: 6px 9px; }
 
