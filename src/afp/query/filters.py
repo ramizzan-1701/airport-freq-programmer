@@ -39,6 +39,17 @@ class FilterState:
     # FACILITY_TYPE/SERVICED_SITE_TYPE together. Replaces the old
     # freq_uses/facility_types/serviced_site_types raw-value filters.
     freq_categories: frozenset[str] | None = None
+    # Categories to drop regardless of freq_categories, including when it
+    # is None. "No category filter" otherwise means literally everything
+    # in the dataset, so a caller that doesn't offer a category at all
+    # still received its entries -- the web UI hides Emergency and NDB
+    # from its filter list, then shipped 856 of them in an unfiltered
+    # export, on a radio that can't even tune the NDB ones.
+    #
+    # Kept separate from freq_categories rather than folded into it so
+    # the CLI, which offers every category, keeps its full reach: it
+    # simply leaves this unset.
+    excluded_freq_categories: frozenset[str] | None = None
     # Optional sub-filter beneath Weather Station, distinguishing ATIS
     # from ASOS/AWOS -- only meaningful in combination with
     # freq_categories including "WEATHER_STATION" (or unset).

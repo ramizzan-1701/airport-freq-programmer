@@ -182,6 +182,11 @@ def _frequency_where(filters: FilterState) -> tuple[str, list]:
         clause, p = _in_clause("freq_category", filters.freq_categories)
         clauses.append(clause)
         params += p
+    if filters.excluded_freq_categories:
+        values = list(filters.excluded_freq_categories)
+        placeholders = ",".join("?" for _ in values)
+        clauses.append(f"freq_category NOT IN ({placeholders})")
+        params += values
     if filters.weather_subtypes:
         clause, p = _in_clause("weather_subtype", filters.weather_subtypes)
         clauses.append(clause)

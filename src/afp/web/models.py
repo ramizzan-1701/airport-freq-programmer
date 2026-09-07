@@ -8,6 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from ..classification import HIDDEN_FROM_WEB_UI_CATEGORIES
 from ..query.filters import FilterState, RadiusFilter
 from ..query.query import resolve_center
 
@@ -51,6 +52,18 @@ class FilterStateIn(BaseModel):
             states=frozenset(self.states) if self.states else None,
             cities=frozenset(self.cities) if self.cities else None,
             freq_categories=frozenset(self.freq_categories) if self.freq_categories else None,
+            # Only when nothing was asked for explicitly. "No category
+            # filter" otherwise means everything in the dataset, so the
+            # web UI shipped Emergency and NDB -- 936 entries nationwide,
+            # NDB not even tunable on the radio -- despite never listing
+            # them for the user to deselect.
+            #
+            # A caller that names a category still gets it: the API keeps
+            # the full filter dimension, and the CLI, which builds its
+            # own FilterState, is untouched either way.
+            excluded_freq_categories=(
+                None if self.freq_categories else HIDDEN_FROM_WEB_UI_CATEGORIES
+            ),
             weather_subtypes=frozenset(self.weather_subtypes) if self.weather_subtypes else None,
             platform_types=frozenset(self.platform_types) if self.platform_types else None,
             facility_statuses=frozenset(self.facility_statuses) if self.facility_statuses else None,

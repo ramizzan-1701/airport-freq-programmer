@@ -578,3 +578,51 @@ def test_ils_kept_when_any_row_at_that_airport_matches_the_status():
     for status in ("TOWERED", "NON_TOWERED"):
         result = apply_filters(conn, FilterState(facility_statuses=frozenset({status})))
         assert _ils_airports(result) == {"VIS"}, status
+
+
+# ---------- categories excluded regardless of the category filter ----------
+
+
+@pytest.fixture
+def excludable_conn():
+    data = NormalizedData(
+        airports=[Airport(id="AAA", name="A", city="X", state="CA", lat=34.0, lon=-118.0, public_use=True)],
+        frequencies=[
+            Frequency(airport_id="AAA", freq_mhz=122.8, freq_category="CTAF"),
+            Frequency(airport_id="AAA", freq_mhz=121.5, freq_category="EMERGENCY"),
+            Frequency(airport_id="AAA", freq_mhz=245.0, freq_category="NDB"),
+        ],
+        ils=[],
+    )
+    return build_database(data)
+
+
+def _categories(result):
+    return {f.freq_category for f in result.frequencies}
+
+
+def test_excluded_categories_are_dropped_with_no_category_filter(excludable_conn):
+    """The case the option exists for: "no filter" means everything, so a
+    caller that never offers Emergency or NDB still shipped them.
+    """
+    result = apply_filters(
+        excludable_conn, FilterState(excluded_freq_categories=frozenset({"EMERGENCY", "NDB"}))
+    )
+    assert _categories(result) == {"CTAF"}
+
+
+def test_excluded_categories_apply_alongside_a_category_filter(excludable_conn):
+    result = apply_filters(
+        excludable_conn,
+        FilterState(
+            freq_categories=frozenset({"CTAF", "EMERGENCY"}),
+            excluded_freq_categories=frozenset({"EMERGENCY"}),
+        ),
+    )
+    assert _categories(result) == {"CTAF"}
+
+
+def test_unset_exclusion_keeps_every_category(excludable_conn):
+    """The CLI leaves this unset and must keep its full reach."""
+    result = apply_filters(excludable_conn, FilterState())
+    assert _categories(result) == {"CTAF", "EMERGENCY", "NDB"}

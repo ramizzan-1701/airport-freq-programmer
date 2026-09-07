@@ -620,3 +620,16 @@ def test_category_counts_sum_to_the_reported_count(client):
     """
     body = client.post("/api/query", json={"mode": "smart"}).json()
     assert sum(c["count"] for c in body["category_counts"]) == body["count"]
+
+
+def test_web_query_excludes_categories_hidden_from_the_filter_list(client):
+    """Emergency and NDB aren't offered in the web UI's category list, so
+    an unfiltered web query must not return them either -- otherwise the
+    export carries entries the user was never able to deselect, including
+    NDB, which the radio can't tune.
+    """
+    from afp.classification import HIDDEN_FROM_WEB_UI_CATEGORIES
+
+    body = client.post("/api/query", json={"mode": "smart"}).json()
+    returned = {c["code"] for c in body["category_counts"]}
+    assert not (returned & HIDDEN_FROM_WEB_UI_CATEGORIES), returned & HIDDEN_FROM_WEB_UI_CATEGORIES
