@@ -1053,22 +1053,14 @@ function openCustomEntriesModal() {
   const modal = document.getElementById("custom-entries-modal");
   const box = modal.querySelector(".modal-box");
   box.innerHTML = "";
-  // Header and actions stay put; only the entry list scrolls. This list
-  // is the one unbounded thing in any modal here -- it's however many
-  // entries the radio had.
-  box.classList.add("modal-split");
 
-  const h2 = document.createElement("h2");
-  h2.textContent = "Custom Frequencies (from your radio)";
-  box.appendChild(h2);
-
-  const sub = document.createElement("p");
-  sub.className = "muted";
   const groupCount = new Set(customEntries.map((e) => e.group)).size;
-  // Worded identically to the compact bar's summary -- same facts, and
-  // two phrasings for one thing read as two different things.
-  sub.textContent = `${customEntries.length} entries · ${groupCount} groups imported`;
-  box.appendChild(sub);
+  // Subtitle worded identically to the compact bar's summary -- same
+  // facts, and two phrasings for one thing read as two different things.
+  box.appendChild(modalHeader(
+    "Custom Frequencies (from your radio)",
+    `${customEntries.length} entries · ${groupCount} groups imported`,
+  ));
 
   const scroll = document.createElement("div");
   scroll.className = "modal-scroll";
@@ -1078,10 +1070,11 @@ function openCustomEntriesModal() {
     // one of the 6 generated group names has all of it discarded, which
     // otherwise shows up as an empty table with no explanation.
     const empty = document.createElement("p");
+    empty.className = "modal-empty";
     empty.textContent = "No custom frequencies were kept from that file.";
     scroll.appendChild(empty);
     const why = document.createElement("p");
-    why.className = "muted";
+    why.className = "modal-note";
     why.textContent = "Every entry in it used one of the 6 group names this app generates, so they were treated as previously generated entries and discarded -- they'll be recreated when you generate. Only entries in your own group names are kept here.";
     scroll.appendChild(why);
   }
@@ -1093,11 +1086,20 @@ function openCustomEntriesModal() {
   const tbody = document.createElement("tbody");
   for (const e of customEntries) {
     const tr = document.createElement("tr");
-    for (const val of [e.tag_name, e.freq_mhz.toFixed(3), e.group, `${e.lat.toFixed(3)}, ${e.lon.toFixed(3)}`]) {
-      const td = document.createElement("td");
-      td.textContent = val;
-      tr.appendChild(td);
-    }
+    tr.appendChild(cell("cell-tag", e.tag_name));
+    tr.appendChild(cell("cell-freq", e.freq_mhz.toFixed(3)));
+
+    // Green marks the one concept it's reserved for: entries that came
+    // off the radio rather than from FAA data.
+    const groupTd = document.createElement("td");
+    const pill = document.createElement("span");
+    pill.className = "group-pill custom";
+    pill.textContent = e.group;
+    groupTd.appendChild(pill);
+    tr.appendChild(groupTd);
+
+    tr.appendChild(cell("cell-pos", `${e.lat.toFixed(3)}, ${e.lon.toFixed(3)}`));
+
     const removeTd = document.createElement("td");
     const removeBtn = document.createElement("button");
     removeBtn.className = "text-action";
@@ -1118,7 +1120,7 @@ function openCustomEntriesModal() {
     // annotates the entries, and permanently occupying footer space
     // would cost more than it's worth.
     const note = document.createElement("p");
-    note.className = "muted";
+    note.className = "modal-note";
     note.textContent = "Note: placing a custom entry into one of the 6 fixed group names above will cause it to be discarded on the next import, since the app can't tell it apart from its own regenerated entries.";
     scroll.appendChild(note);
   }
@@ -1152,32 +1154,40 @@ function showBlockedImportModal({ groups, found, available }) {
   const box = modal.querySelector(".modal-box");
   box.innerHTML = "";
 
-  const h2 = document.createElement("h2");
-  h2.textContent = "Too many custom groups";
-  box.appendChild(h2);
+  const head = modalHeader("Too many custom groups");
+  head.querySelector("h2").classList.add("blocked-title");
+  box.appendChild(head);
+
+  const scroll = document.createElement("div");
+  scroll.className = "modal-scroll blocked-body";
 
   const p1 = document.createElement("p");
   p1.textContent = `Your imported file uses more distinct custom group names than the radio has room for. The FTA-850L has 9 total slots -- 6 are permanently reserved for this app's standard scheme, leaving ${available} remaining slots for anything else.`;
-  box.appendChild(p1);
+  scroll.appendChild(p1);
 
+  // The offending names listed plainly: the remedy below asks the user
+  // to consolidate them, which needs knowing which they are.
   const list = document.createElement("ul");
-  list.className = "group-name-list";
+  list.className = "blocked-list";
   for (const g of groups) {
     const li = document.createElement("li");
     li.textContent = g;
     list.appendChild(li);
   }
-  box.appendChild(list);
+  scroll.appendChild(list);
 
   const p2 = document.createElement("p");
-  p2.className = "muted";
+  p2.className = "blocked-tally";
   p2.textContent = `Found: ${found} distinct custom groups. Available: ${available}. Over by: ${found - available}.`;
-  box.appendChild(p2);
+  scroll.appendChild(p2);
 
   const p3 = document.createElement("p");
   p3.textContent = `In YCE-64, consolidate these ${found} groups down to ${available} or fewer -- merge entries into fewer groups, or delete ones you don't need -- then re-export and re-import.`;
-  box.appendChild(p3);
+  scroll.appendChild(p3);
+  box.appendChild(scroll);
 
+  const footer = document.createElement("div");
+  footer.className = "modal-footer";
   const actionsRow = document.createElement("div");
   actionsRow.className = "modal-actions";
   const closeBtn = document.createElement("button");
@@ -1185,7 +1195,8 @@ function showBlockedImportModal({ groups, found, available }) {
   closeBtn.textContent = "Close";
   closeBtn.addEventListener("click", () => modal.classList.add("hidden"));
   actionsRow.appendChild(closeBtn);
-  box.appendChild(actionsRow);
+  footer.appendChild(actionsRow);
+  box.appendChild(footer);
 
   modal.classList.remove("hidden");
 }
@@ -1195,43 +1206,108 @@ function showBlockedImportModal({ groups, found, available }) {
  * place deliberately: two copies of this text would drift, and the whole
  * point of the confirmation is that it says the same thing.
  */
+/** The instruction body, shared by the topbar's reference modal and the
+ * pre-generate gate.
+ *
+ * Three visually separated zones rather than one block of prose -- the
+ * consequence, the one thing to open, and the names themselves. As a
+ * single wall of text this wasn't getting read, which matters because a
+ * wrong group name fails silently.
+ */
 function appendGroupSetupInstructions(box) {
-  const p1 = document.createElement("p");
-  p1.textContent = "This app will sort frequencies into 6 alphabetized Groups for quick recall on your radio. The Yaesu YCE-64 editor can't create or edit Group names on import - they must already exist there, or that group's frequencies will be dropped.";
-  box.appendChild(p1);
+  const scroll = document.createElement("div");
+  scroll.className = "modal-scroll";
 
-  const p2 = document.createElement("p");
-  p2.textContent = "There are 9 Group slots available. Rename 6 of them:";
-  box.appendChild(p2);
+  // --- zone 1: why it matters ---
+  const why = document.createElement("div");
+  why.className = "setup-why";
+  const whyInner = document.createElement("div");
+  whyInner.className = "setup-why-inner";
+  const kicker = document.createElement("div");
+  kicker.className = "setup-kicker";
+  kicker.textContent = "Why this matters";
+  const whyText = document.createElement("p");
+  whyText.textContent = "This app will sort frequencies into 6 alphabetized Groups for quick recall on your radio. The Yaesu YCE-64 editor can't create or edit Group names on import - they must already exist there, or that group's frequencies will be dropped.";
+  const whyLead = document.createElement("p");
+  whyLead.className = "setup-lead";
+  whyLead.textContent = "There are 9 Group slots available. Rename 6 of them:";
+  whyInner.append(kicker, whyText, whyLead);
+  why.appendChild(whyInner);
+  scroll.appendChild(why);
 
-  const steps = document.createElement("ol");
-  steps.className = "setup-steps";
-  for (const step of [
-    "Open the YCE-64 editor. Go to: Setup -> Memory Group Name.",
-    "Rename 6 of the 9 Groups to the following names - a one time setup",
-    "The remaining 3 Groups are yours - you can name them whatever you like for your own Custom frequencies.",
-  ]) {
-    const li = document.createElement("li");
-    li.textContent = step;
-    steps.appendChild(li);
-  }
-  box.appendChild(steps);
+  // --- zone 2: the one thing to open ---
+  const step1 = document.createElement("div");
+  step1.className = "setup-step";
+  step1.appendChild(stepNumber("1"));
+  const step1Text = document.createElement("div");
+  step1Text.append(
+    document.createTextNode("Open the YCE-64 editor. Go to: "),
+    Object.assign(document.createElement("b"), { textContent: "Setup -> Memory Group Name" }),
+    document.createTextNode("."),
+  );
+  step1.appendChild(step1Text);
+  scroll.appendChild(step1);
+
+  // --- zone 3: the name ledger ---
+  // Steps 2 and 3 sit where they apply rather than in a list above it:
+  // the names are the thing being acted on, so the instruction to rename
+  // them heads the table and the note about the leftovers closes it.
+  const ledger = document.createElement("div");
+  ledger.className = "ledger";
+
+  const ledgerHead = document.createElement("div");
+  ledgerHead.className = "ledger-head";
+  ledgerHead.appendChild(stepNumber("2"));
+  ledgerHead.appendChild(
+    Object.assign(document.createElement("div"), {
+      textContent: "Rename 6 of the 9 Groups to the following names - a one time setup",
+    }),
+  );
+  ledger.appendChild(ledgerHead);
 
   const list = document.createElement("ul");
   list.className = "group-name-list";
-  for (const name of fixedGroupNames) {
+  fixedGroupNames.forEach((name, i) => {
     const li = document.createElement("li");
+    const slot = document.createElement("span");
+    slot.className = "slot-label";
+    slot.textContent = `GROUP ${i + 1}`;
+    const arrow = document.createElement("span");
+    arrow.className = "slot-arrow";
+    arrow.textContent = "→";
     const label = document.createElement("span");
+    label.className = "slot-name";
     label.textContent = name;
     // Per-name rather than one bulk copy: these get pasted into six
     // separate YCE-64 fields, so a single comma-joined string can't
     // actually be used. Typing them is easy enough, but a mistyped name
     // fails silently -- YCE-64 just drops that entry's grouping.
-    li.append(label, copyNameButton(name));
+    li.append(slot, arrow, label, copyNameButton(name));
     list.appendChild(li);
-  }
-  box.appendChild(list);
+  });
+  ledger.appendChild(list);
+
+  const ledgerFoot = document.createElement("div");
+  ledgerFoot.className = "ledger-foot";
+  ledgerFoot.appendChild(stepNumber("3", true));
+  ledgerFoot.appendChild(
+    Object.assign(document.createElement("div"), {
+      textContent: "The remaining 3 Groups are yours - you can name them whatever you like for your own Custom frequencies.",
+    }),
+  );
+  ledger.appendChild(ledgerFoot);
+
+  scroll.appendChild(ledger);
+  box.appendChild(scroll);
 }
+
+function stepNumber(text, outline = false) {
+  const el = document.createElement("span");
+  el.className = "step-num" + (outline ? " outline" : "");
+  el.textContent = text;
+  return el;
+}
+
 
 function copyNameButton(name) {
   const btn = document.createElement("button");
@@ -1264,12 +1340,11 @@ function showGroupSetupModal() {
   const box = modal.querySelector(".modal-box");
   box.innerHTML = "";
 
-  const h2 = document.createElement("h2");
-  h2.textContent = "Rename your memory groups first";
-  box.appendChild(h2);
-
+  box.appendChild(modalHeader("Rename your memory groups first"));
   appendGroupSetupInstructions(box);
 
+  const footer = document.createElement("div");
+  footer.className = "modal-footer";
   const actionsRow = document.createElement("div");
   actionsRow.className = "modal-actions";
   const closeBtn = document.createElement("button");
@@ -1277,9 +1352,27 @@ function showGroupSetupModal() {
   closeBtn.textContent = "Close";
   closeBtn.addEventListener("click", () => modal.classList.add("hidden"));
   actionsRow.append(closeBtn);
-  box.appendChild(actionsRow);
+  footer.appendChild(actionsRow);
+  box.appendChild(footer);
 
   modal.classList.remove("hidden");
+}
+
+/** Pinned modal header. The body between this and the footer scrolls,
+ * so the title and the buttons stay reachable at any window size. */
+function modalHeader(title, subtitle) {
+  const head = document.createElement("div");
+  head.className = "modal-head";
+  const h2 = document.createElement("h2");
+  h2.textContent = title;
+  head.appendChild(h2);
+  if (subtitle) {
+    const sub = document.createElement("p");
+    sub.className = "modal-sub";
+    sub.textContent = subtitle;
+    head.appendChild(sub);
+  }
+  return head;
 }
 
 /** Confirmation gate shown when "Generate XML" is clicked. Resolves true
@@ -1295,26 +1388,25 @@ function confirmGroupSetupBeforeGenerate() {
     const box = modal.querySelector(".modal-box");
     box.innerHTML = "";
 
-    const h2 = document.createElement("h2");
-    h2.textContent = "Before you generate: check your memory groups";
-    box.appendChild(h2);
-
+    box.appendChild(modalHeader("Before you generate: check your memory groups"));
     appendGroupSetupInstructions(box);
 
     // Opt-out, not auto-dismiss: the gate keeps appearing until the user
     // deliberately says they're done with it. The instructions stay
     // reachable from the topbar's "Group setup instructions" button, so
     // dismissing this loses nothing.
+    const footer = document.createElement("div");
+    footer.className = "modal-footer";
     const suppressRow = document.createElement("div");
-    suppressRow.className = "checkbox-row";
+    suppressRow.className = "suppress-row";
     const suppressCb = document.createElement("input");
     suppressCb.type = "checkbox";
     suppressCb.id = "suppress-group-setup-gate";
     const suppressLabel = document.createElement("label");
     suppressLabel.htmlFor = suppressCb.id;
-    suppressLabel.append(suppressCb, document.createTextNode(" Don't show this message again"));
+    suppressLabel.append(suppressCb, document.createTextNode("Don't show this message again"));
     suppressRow.appendChild(suppressLabel);
-    box.appendChild(suppressRow);
+    footer.appendChild(suppressRow);
 
     let settled = false;
     const finish = (proceed) => {
@@ -1355,7 +1447,8 @@ function confirmGroupSetupBeforeGenerate() {
     });
 
     actionsRow.append(cancelBtn, proceedBtn);
-    box.appendChild(actionsRow);
+    footer.appendChild(actionsRow);
+    box.appendChild(footer);
 
     document.addEventListener("keydown", onKeydown);
     modal.classList.remove("hidden");
