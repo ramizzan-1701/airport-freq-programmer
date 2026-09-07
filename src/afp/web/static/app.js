@@ -199,7 +199,7 @@ async function init() {
     await initWorkspace();
   }
 
-  checkForUpdate();
+  checkForUpdate(status.loaded_cycle);
 
   document.getElementById("fetch-btn").addEventListener("click", doFetch);
   document.getElementById("group-setup-link").addEventListener("click", () => showGroupSetupModal());
@@ -211,7 +211,12 @@ async function init() {
   });
 }
 
-async function checkForUpdate() {
+async function checkForUpdate(loadedCycle) {
+  // "Update available" against nothing loaded is meaningless -- the
+  // server reports one whenever no cycle has been processed, which is
+  // always true on a first run, so it read as "Update available" sitting
+  // beside "No data loaded". The Fetch button already covers that case.
+  if (!loadedCycle) return;
   try {
     const res = await api("/api/check-update");
     if (!res.ok) return;
@@ -250,8 +255,13 @@ function renderCycleList(cycles) {
   }
   for (const cycle of cycles) {
     const btn = document.createElement("button");
-    btn.className = "btn";
-    btn.textContent = cycle;
+    btn.className = "cycle-row";
+    const date = document.createElement("span");
+    date.textContent = cycle;
+    const meta = document.createElement("span");
+    meta.className = "meta";
+    meta.textContent = "downloaded";
+    btn.append(date, meta);
     btn.addEventListener("click", () => loadCycle(cycle));
     el.appendChild(btn);
   }

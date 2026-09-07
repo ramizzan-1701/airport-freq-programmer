@@ -6,6 +6,16 @@
       "runtimeExecutable": ".venv/Scripts/python.exe",
       "runtimeArgs": ["-m", "afp.cli", "serve", "--port", "8765", "--no-browser"],
       "port": 8765
+    },
+    {
+      "name": "afp-web-firstrun",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "-m", "afp.cli",
+        "--cache-dir", "C:/Users/ramiz/AppData/Local/Temp/claude/C--Users-ramiz-OneDrive-Documents-Claude-Code-Projects-Airport-Freq-Programmer/9ecdaee2-5c6e-49f2-86ef-6bbc481d5fa1/scratchpad/emptycache",
+        "serve", "--port", "8766", "--no-browser"
+      ],
+      "port": 8766
     }
   ]
 }
