@@ -18,10 +18,19 @@ const selected = {
 };
 
 let filterOptions = null;
-let cityMultiSelect = null;
 let lastQueryResult = null;
 let queryDebounceTimer = null;
 let freqCategoryAdvancedExpanded = false;
+
+// Which accordion group is expanded, or null for none. Single-open by
+// design: it's what keeps an option list from scrolling inside the
+// rail's own scroll. Frequency Category is the one people reach for
+// first, so it starts open.
+let openGroup = "cat";
+
+// City options depend on the selected states, so they're fetched rather
+// than read from filterOptions.
+let cityOptions = [];
 
 // Mirrors afp.classification.ILS_PSEUDO_CATEGORY -- the "ILS / Localizer"
 // checkbox's code in the Frequency Category list.
@@ -209,37 +218,11 @@ function normalizeOptions(options) {
   return options.map((o) => (typeof o === "string" ? { code: o, label: o } : o));
 }
 
-function createMultiSelect(container, { title, options, selectedSet, searchable = true, onChange }) {
+/** The option list for one open accordion group: optional search box,
+ * then the checkboxes. The group header (title, summary, Select all /
+ * Clear, caret) is the accordion's job -- this only fills the body. */
+function buildOptionList(container, { options, selectedSet, searchable = true, onChange, onSummaryChange }) {
   options = normalizeOptions(options);
-  const wrap = document.createElement("div");
-  wrap.className = "filter-group";
-
-  const labelRow = document.createElement("div");
-  labelRow.className = "filter-group-label";
-  const labelText = document.createElement("span");
-  labelText.textContent = title;
-  const badge = document.createElement("span");
-  badge.className = "count-badge";
-  badge.style.display = "none";
-  const actions = groupActions(
-    () => {
-      for (const opt of options) selectedSet.add(opt.code);
-      renderList(searchInput ? searchInput.value : "");
-      updateBadge();
-      onChange();
-    },
-    () => {
-      selectedSet.clear();
-      renderList(searchInput ? searchInput.value : "");
-      updateBadge();
-      onChange();
-    },
-  );
-  const rightSide = document.createElement("span");
-  rightSide.className = "filter-group-right";
-  rightSide.append(actions, badge);
-  labelRow.append(labelText, rightSide);
-  wrap.appendChild(labelRow);
 
   let searchInput = null;
   if (searchable) {
@@ -247,21 +230,12 @@ function createMultiSelect(container, { title, options, selectedSet, searchable 
     searchInput.type = "text";
     searchInput.placeholder = "Search...";
     searchInput.className = "multiselect-search";
-    wrap.appendChild(searchInput);
+    container.appendChild(searchInput);
   }
 
   const list = document.createElement("div");
   list.className = "multiselect-list";
-  wrap.appendChild(list);
-
-  function updateBadge() {
-    if (selectedSet.size > 0) {
-      badge.style.display = "";
-      badge.textContent = `${selectedSet.size} selected`;
-    } else {
-      badge.style.display = "none";
-    }
-  }
+  container.appendChild(list);
 
   function renderList(filterText) {
     list.innerHTML = "";
@@ -291,17 +265,17 @@ function createMultiSelect(container, { title, options, selectedSet, searchable 
       cb.addEventListener("change", () => {
         if (cb.checked) selectedSet.add(opt.code);
         else selectedSet.delete(opt.code);
-        updateBadge();
+        if (onSummaryChange) onSummaryChange();
         onChange();
       });
       const text = opt.code === opt.label ? opt.label : `${opt.code} - ${opt.label}`;
-      lbl.append(cb, document.createTextNode(" " + text));
+      lbl.append(cb, document.createTextNode(text));
       list.appendChild(lbl);
     }
     if (overflow) {
       const hint = document.createElement("div");
-      hint.className = "multiselect-empty";
-      hint.textContent = `Showing ${MAX_RENDERED_OPTIONS} of ${filtered.length} -- type to narrow down`;
+      hint.className = "multiselect-overflow";
+      hint.textContent = `Showing ${MAX_RENDERED_OPTIONS} of ${filtered.length} — type to narrow down`;
       list.appendChild(hint);
     }
   }
@@ -311,16 +285,6 @@ function createMultiSelect(container, { title, options, selectedSet, searchable 
   }
 
   renderList("");
-  updateBadge();
-  container.appendChild(wrap);
-
-  return {
-    rerender(newOptions) {
-      if (newOptions) options = normalizeOptions(newOptions);
-      renderList(searchInput ? searchInput.value : "");
-      updateBadge();
-    },
-  };
 }
 
 function clearAllFilters() {
@@ -340,6 +304,76 @@ function clearAllFilters() {
   runQuery();
 }
 
+/** One accordion row. Only `openGroup` is expanded; opening another
+ * closes this one.
+ *
+ * Collapsing is what removes the nested scroll the rail used to have:
+ * with one group open at a time its option list fits, so nothing scrolls
+ * inside the rail's own scroll. A `max-height` on a list would bring
+ * that straight back.
+ */
+function accordionGroup(container, { key, title, summary, actions, buildBody }) {
+  const isOpen = openGroup === key;
+
+  const wrap = document.createElement("div");
+  wrap.className = "filter-group";
+
+  const head = document.createElement("div");
+  head.className = "filter-group-label";
+  head.tabIndex = 0;
+  head.setAttribute("role", "button");
+  head.setAttribute("aria-expanded", String(isOpen));
+
+  const main = document.createElement("div");
+  main.className = "filter-group-main";
+  const titleEl = document.createElement("div");
+  titleEl.className = "filter-group-title";
+  titleEl.textContent = title;
+  const summaryEl = document.createElement("div");
+  summaryEl.className = "filter-group-summary";
+  summaryEl.textContent = summary;
+  main.append(titleEl, summaryEl);
+  head.appendChild(main);
+
+  // Select all / Clear only on the open group -- a closed one has
+  // nothing on screen to act on.
+  if (isOpen && actions) head.appendChild(actions);
+
+  const caret = document.createElement("span");
+  caret.className = "filter-group-caret";
+  caret.textContent = isOpen ? "−" : "+";
+  head.appendChild(caret);
+
+  function toggle() {
+    openGroup = isOpen ? null : key;
+    renderFilters();
+  }
+  head.addEventListener("click", toggle);
+  head.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      toggle();
+    }
+  });
+
+  wrap.appendChild(head);
+
+  if (isOpen) {
+    const body = document.createElement("div");
+    body.className = "filter-group-body";
+    buildBody(body);
+    wrap.appendChild(body);
+  }
+
+  container.appendChild(wrap);
+}
+
+/** Summary line for a multi-select group: the selected count, or what
+ * an empty set actually means -- no narrowing, everything passes. */
+function setSummary(selectedSet, emptyText) {
+  return selectedSet.size > 0 ? `${selectedSet.size} selected` : emptyText;
+}
+
 function renderFilters() {
   // The rail's scroll container, not the rail itself: the "Filters"
   // heading and "Clear all filters" live in a fixed header above it.
@@ -348,57 +382,107 @@ function renderFilters() {
 
   // --- Scope ---
   const scopeSection = section(root, "Scope");
-  const modeRow = document.createElement("div");
-  modeRow.className = "filter-group";
-  const modeLabel = document.createElement("div");
-  modeLabel.className = "filter-group-label";
-  modeLabel.innerHTML = "<span>Data interpretation</span>";
-  modeRow.appendChild(modeLabel);
-  const radioRow = document.createElement("div");
-  radioRow.className = "radio-row";
-  for (const [value, text] of [["smart", "Smart"], ["raw", "Raw"]]) {
-    const lbl = document.createElement("label");
-    const rb = document.createElement("input");
-    rb.type = "radio";
-    rb.name = "mode";
-    rb.value = value;
-    rb.checked = selected.mode === value;
-    rb.addEventListener("change", () => { selected.mode = value; scheduleQuery(); });
-    lbl.append(rb, document.createTextNode(" " + text));
-    radioRow.appendChild(lbl);
-  }
-  modeRow.appendChild(radioRow);
-  scopeSection.appendChild(modeRow);
 
-  const typeGroup = document.createElement("div");
-  typeGroup.className = "filter-group";
-  const typeLabel = document.createElement("div");
-  typeLabel.className = "filter-group-label";
-  typeLabel.innerHTML = "<span>Type</span>";
-  typeGroup.appendChild(typeLabel);
-  checkboxRow(typeGroup, "Include public-use airports", selected.includePublic, (checked) => {
-    selected.includePublic = checked; scheduleQuery();
+  accordionGroup(scopeSection, {
+    key: "mode",
+    title: "Data interpretation",
+    summary: selected.mode === "smart" ? "Smart" : "Raw",
+    buildBody(body) {
+      const list = document.createElement("div");
+      list.className = "multiselect-list";
+      for (const [value, text] of [["smart", "Smart"], ["raw", "Raw"]]) {
+        const lbl = document.createElement("label");
+        const rb = document.createElement("input");
+        rb.type = "radio";
+        rb.name = "mode";
+        rb.value = value;
+        rb.checked = selected.mode === value;
+        rb.addEventListener("change", () => {
+          selected.mode = value;
+          renderFilters();
+          scheduleQuery();
+        });
+        lbl.append(rb, document.createTextNode(text));
+        list.appendChild(lbl);
+      }
+      body.appendChild(list);
+    },
   });
-  checkboxRow(typeGroup, "Include private-use airports", selected.includePrivate, (checked) => {
-    selected.includePrivate = checked; scheduleQuery();
+
+  const typeSummary = selected.includePublic && selected.includePrivate
+    ? "Public and private"
+    : selected.includePublic ? "Public-use only"
+    : selected.includePrivate ? "Private-use only"
+    : "Neither — no entries";
+  accordionGroup(scopeSection, {
+    key: "type",
+    title: "Type",
+    summary: typeSummary,
+    buildBody(body) {
+      const list = document.createElement("div");
+      list.className = "multiselect-list";
+      checkboxRow(list, "Include public-use airports", selected.includePublic, (checked) => {
+        selected.includePublic = checked;
+        renderFilters();
+        scheduleQuery();
+      });
+      checkboxRow(list, "Include private-use airports", selected.includePrivate, (checked) => {
+        selected.includePrivate = checked;
+        renderFilters();
+        scheduleQuery();
+      });
+      body.appendChild(list);
+    },
   });
-  scopeSection.appendChild(typeGroup);
 
   // --- Location ---
   const locationSection = section(root, "Location");
-  createMultiSelect(locationSection, {
+
+  accordionGroup(locationSection, {
+    key: "state",
     title: "State",
-    options: filterOptions.states,
-    selectedSet: selected.states,
-    onChange: async () => { await refreshCityOptions(); scheduleQuery(); },
+    summary: setSummary(selected.states, "All states"),
+    actions: groupActions(
+      () => {
+        for (const o of normalizeOptions(filterOptions.states)) selected.states.add(o.code);
+        renderFilters();
+        refreshCityOptions().then(scheduleQuery);
+      },
+      () => {
+        selected.states.clear();
+        renderFilters();
+        refreshCityOptions().then(scheduleQuery);
+      },
+    ),
+    buildBody(body) {
+      buildOptionList(body, {
+        options: filterOptions.states,
+        selectedSet: selected.states,
+        searchable: true,
+        onChange: async () => { await refreshCityOptions(); scheduleQuery(); },
+        onSummaryChange: refreshOpenGroupSummary,
+      });
+    },
   });
-  cityMultiSelect = createMultiSelect(locationSection, {
+
+  accordionGroup(locationSection, {
+    key: "city",
     title: "City",
-    options: [],
-    selectedSet: selected.cities,
-    onChange: () => scheduleQuery(),
+    summary: setSummary(selected.cities, "All cities"),
+    actions: groupActions(
+      () => { for (const c of cityOptions) selected.cities.add(c); renderFilters(); scheduleQuery(); },
+      () => { selected.cities.clear(); renderFilters(); scheduleQuery(); },
+    ),
+    buildBody(body) {
+      buildOptionList(body, {
+        options: cityOptions,
+        selectedSet: selected.cities,
+        searchable: true,
+        onChange: () => scheduleQuery(),
+        onSummaryChange: refreshOpenGroupSummary,
+      });
+    },
   });
-  refreshCityOptions();
 
   renderRadiusFilters(locationSection);
 
@@ -406,41 +490,94 @@ function renderFilters() {
   const freqSection = section(root, "Frequency");
   renderFreqCategoryFilter(freqSection);
 
-  // These two only narrow *which* ILS records show -- they're meaningless
-  // (and hidden) unless "ILS / Localizer" is explicitly checked above,
-  // since unchecking it excludes ILS entries outright regardless of these.
-  if (selected.freqCategories.has(ILS_PSEUDO_CATEGORY)) {
-    createMultiSelect(freqSection, {
-      title: "ILS Component Status",
-      options: filterOptions.ils_component_statuses,
-      selectedSet: selected.ilsStatuses,
-      onChange: () => scheduleQuery(),
-    });
-    renderIlsSystemTypeFilter(freqSection);
-  } else {
-    const ilsHint = document.createElement("p");
-    ilsHint.className = "muted";
-    ilsHint.textContent = "Check \"ILS / Localizer\" under Frequency Category above to filter by ILS Component Status or System Type.";
-    freqSection.appendChild(ilsHint);
-  }
-
   // --- Facility ---
   const facilitySection = section(root, "Facility");
-  const nonSiteHint = document.createElement("p");
-  nonSiteHint.className = "muted";
-  nonSiteHint.textContent = "Site Type and Facility Status only apply to airports -- non-site facilities (VOR, RCAG, TRACON, etc.) have neither, so narrowing either filter would otherwise exclude them entirely. Check this to keep them regardless of what's selected below.";
-  facilitySection.appendChild(nonSiteHint);
-  checkboxRow(facilitySection, "Retain non-site facilities (VOR, TRACON, etc.)", selected.includeNonSiteFacilities, (checked) => {
-    selected.includeNonSiteFacilities = checked; scheduleQuery();
-  });
-  createMultiSelect(facilitySection, {
+  renderNonSiteToggle(facilitySection);
+
+  accordionGroup(facilitySection, {
+    key: "siteType",
     title: "Site Type",
-    options: filterOptions.platform_types,
-    selectedSet: selected.platformTypes,
-    searchable: false,
-    onChange: () => scheduleQuery(),
+    summary: setSummary(selected.platformTypes, "All site types"),
+    actions: groupActions(
+      () => {
+        for (const o of normalizeOptions(filterOptions.platform_types)) selected.platformTypes.add(o.code);
+        renderFilters();
+        scheduleQuery();
+      },
+      () => { selected.platformTypes.clear(); renderFilters(); scheduleQuery(); },
+    ),
+    buildBody(body) {
+      buildOptionList(body, {
+        options: filterOptions.platform_types,
+        selectedSet: selected.platformTypes,
+        searchable: false,
+        onChange: () => scheduleQuery(),
+        onSummaryChange: refreshOpenGroupSummary,
+      });
+    },
   });
-  renderFacilityStatusFilter(facilitySection);
+
+  accordionGroup(facilitySection, {
+    key: "facilityStatus",
+    title: "Facility Status",
+    summary: setSummary(selected.facilityStatuses, "All statuses"),
+    actions: groupActions(
+      () => {
+        for (const o of filterOptions.facility_statuses) selected.facilityStatuses.add(o.code);
+        renderFilters();
+        scheduleQuery();
+      },
+      () => { selected.facilityStatuses.clear(); renderFilters(); scheduleQuery(); },
+    ),
+    buildBody(body) {
+      buildOptionList(body, {
+        options: filterOptions.facility_statuses,
+        selectedSet: selected.facilityStatuses,
+        searchable: false,
+        onChange: () => scheduleQuery(),
+        onSummaryChange: refreshOpenGroupSummary,
+      });
+    },
+  });
+}
+
+/** Updates the open group's summary in place after a checkbox toggle, so
+ * the count tracks without re-rendering (and blowing away search text or
+ * scroll position) on every click. */
+function refreshOpenGroupSummary() {
+  const el = document.querySelector(".filter-group-label[aria-expanded='true'] .filter-group-summary");
+  if (!el) return;
+  const summaries = {
+    state: () => setSummary(selected.states, "All states"),
+    city: () => setSummary(selected.cities, "All cities"),
+    cat: () => setSummary(selected.freqCategories, "All categories"),
+    siteType: () => setSummary(selected.platformTypes, "All site types"),
+    facilityStatus: () => setSummary(selected.facilityStatuses, "All statuses"),
+  };
+  if (summaries[openGroup]) el.textContent = summaries[openGroup]();
+}
+
+/** The non-site toggle sits above both Facility groups rather than
+ * inside either: it exempts rows from Site Type *and* Facility Status,
+ * so hiding it inside one collapsed group would bury a control that
+ * governs the other. */
+function renderNonSiteToggle(container) {
+  const wrap = document.createElement("div");
+  wrap.className = "non-site-block";
+
+  const note = document.createElement("p");
+  note.className = "filter-note";
+  note.textContent = "Site Type and Facility Status only apply to airports — non-site facilities (VOR, RCAG, TRACON, etc.) have neither, so narrowing either filter would otherwise exclude them entirely. Check this to keep them regardless of what's selected below.";
+  wrap.appendChild(note);
+
+  const list = document.createElement("div");
+  list.className = "multiselect-list";
+  checkboxRow(list, "Retain non-site facilities (VOR, TRACON, etc.)", selected.includeNonSiteFacilities, (checked) => {
+    selected.includeNonSiteFacilities = checked;
+    scheduleQuery();
+  });
+  wrap.appendChild(list);
+  container.appendChild(wrap);
 }
 
 function section(root, title) {
@@ -454,167 +591,137 @@ function section(root, title) {
 }
 
 function renderFreqCategoryFilter(container) {
-  const wrap = document.createElement("div");
-  wrap.className = "filter-group";
-
-  const labelRow = document.createElement("div");
-  labelRow.className = "filter-group-label";
-  const labelText = document.createElement("span");
-  labelText.textContent = "Frequency Category";
-  const badge = document.createElement("span");
-  badge.className = "count-badge";
-  badge.style.display = "none";
-  const actions = groupActions(
-    () => {
-      // Advanced categories collapsed -> "select all" only means the
-      // visible default-view ones, not the dozens hidden behind the
-      // toggle. Expanded -> everything on screen is fair game.
-      const selectable = freqCategoryAdvancedExpanded
-        ? filterOptions.freq_categories
-        : filterOptions.freq_categories.filter((o) => o.default_view);
-      for (const opt of selectable) selected.freqCategories.add(opt.code);
-      renderFilters();
-      scheduleQuery();
-    },
-    () => {
-      selected.freqCategories.clear();
-      renderFilters();
-      scheduleQuery();
-    },
-  );
-  const rightSide = document.createElement("span");
-  rightSide.className = "filter-group-right";
-  rightSide.append(actions, badge);
-  labelRow.append(labelText, rightSide);
-  wrap.appendChild(labelRow);
-
-  function updateBadge() {
-    if (selected.freqCategories.size > 0) {
-      badge.style.display = "";
-      badge.textContent = `${selected.freqCategories.size} selected`;
-    } else {
-      badge.style.display = "none";
-    }
-  }
-
-  function categoryCheckbox(opt) {
-    const lbl = document.createElement("label");
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = selected.freqCategories.has(opt.code);
-    cb.addEventListener("change", () => {
-      if (cb.checked) selected.freqCategories.add(opt.code);
-      else selected.freqCategories.delete(opt.code);
-      // The ILS sub-filters' visibility depends on this one checkbox, so
-      // it needs a full re-render; the others only need the badge count.
-      if (opt.code === ILS_PSEUDO_CATEGORY) {
-        renderFilters();
-      } else {
-        updateBadge();
-      }
-      scheduleQuery();
-    });
-    let text = opt.label;
-    if (opt.not_usable_on_fta_850l) text += " -- not usable on FTA-850L";
-    lbl.append(cb, document.createTextNode(" " + text));
-    return lbl;
-  }
-
-  // spec §3: default view is a curated set of ~9 common categories;
-  // everything else (STAR/DP procedure fixes, military ops, RCAG, ...)
-  // sits behind an explicit toggle so the panel doesn't overwhelm with
-  // dozens of rarely-used checkboxes.
-  const list = document.createElement("div");
-  list.className = "multiselect-list";
-  const defaultOptions = filterOptions.freq_categories.filter((o) => o.default_view);
   const advancedOptions = filterOptions.freq_categories.filter((o) => !o.default_view);
-  for (const opt of defaultOptions) list.appendChild(categoryCheckbox(opt));
 
-  if (advancedOptions.length > 0) {
-    const advancedList = document.createElement("div");
-    advancedList.className = freqCategoryAdvancedExpanded ? "" : "hidden";
-    for (const opt of advancedOptions) advancedList.appendChild(categoryCheckbox(opt));
-    list.appendChild(advancedList);
+  accordionGroup(container, {
+    key: "cat",
+    title: "Frequency Category",
+    summary: setSummary(selected.freqCategories, "All categories"),
+    actions: groupActions(
+      () => {
+        // Advanced categories collapsed -> "select all" means only the
+        // visible default-view ones, not the dozens behind the toggle.
+        const selectable = freqCategoryAdvancedExpanded
+          ? filterOptions.freq_categories
+          : filterOptions.freq_categories.filter((o) => o.default_view);
+        for (const opt of selectable) selected.freqCategories.add(opt.code);
+        renderFilters();
+        scheduleQuery();
+      },
+      () => {
+        selected.freqCategories.clear();
+        renderFilters();
+        scheduleQuery();
+      },
+    ),
+    buildBody(body) {
+      function categoryCheckbox(opt) {
+        const lbl = document.createElement("label");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = selected.freqCategories.has(opt.code);
+        cb.addEventListener("change", () => {
+          if (cb.checked) selected.freqCategories.add(opt.code);
+          else selected.freqCategories.delete(opt.code);
+          // The ILS sub-block's presence depends on this one checkbox,
+          // so it needs a full re-render; the rest only move the count.
+          if (opt.code === ILS_PSEUDO_CATEGORY) {
+            renderFilters();
+          } else {
+            refreshOpenGroupSummary();
+          }
+          scheduleQuery();
+        });
+        let text = opt.label;
+        if (opt.not_usable_on_fta_850l) text += " — not usable on FTA-850L";
+        lbl.append(cb, document.createTextNode(text));
+        return lbl;
+      }
 
-    const toggleBtn = document.createElement("button");
-    toggleBtn.className = "btn btn-small";
-    toggleBtn.style.marginTop = "6px";
-    toggleBtn.textContent = freqCategoryAdvancedExpanded
-      ? "Hide advanced categories"
-      : `Advanced: show raw values (${advancedOptions.length})`;
-    toggleBtn.addEventListener("click", () => {
-      freqCategoryAdvancedExpanded = !freqCategoryAdvancedExpanded;
-      renderFilters();
-    });
-    list.appendChild(toggleBtn);
-  }
+      // spec §3: default view is a curated set of ~9 common categories;
+      // everything else (STAR/DP procedure fixes, military ops, RCAG,
+      // ...) sits behind an explicit toggle so the panel doesn't
+      // overwhelm with dozens of rarely-used checkboxes.
+      const list = document.createElement("div");
+      list.className = "multiselect-list";
+      for (const opt of filterOptions.freq_categories.filter((o) => o.default_view)) {
+        list.appendChild(categoryCheckbox(opt));
+      }
+      if (freqCategoryAdvancedExpanded) {
+        for (const opt of advancedOptions) list.appendChild(categoryCheckbox(opt));
+      }
+      body.appendChild(list);
 
-  wrap.appendChild(list);
-  updateBadge();
-  container.appendChild(wrap);
+      if (advancedOptions.length > 0) {
+        const toggleBtn = document.createElement("button");
+        toggleBtn.className = "more-btn";
+        toggleBtn.textContent = freqCategoryAdvancedExpanded
+          ? "Hide advanced categories"
+          : `Advanced: show raw values (${advancedOptions.length})`;
+        toggleBtn.addEventListener("click", () => {
+          freqCategoryAdvancedExpanded = !freqCategoryAdvancedExpanded;
+          renderFilters();
+        });
+        body.appendChild(toggleBtn);
+      }
+
+      if (selected.freqCategories.has(ILS_PSEUDO_CATEGORY)) {
+        renderIlsSubFilters(body);
+      }
+    },
+  });
 }
 
-function renderFacilityStatusFilter(container) {
+/** ILS Component Status and System Type, nested inside the Frequency
+ * Category body rather than sitting beside it.
+ *
+ * The accent rule down the left is the whole signal that these belong to
+ * the "ILS / Localizer" checkbox above -- it replaces the prose hint that
+ * used to state the dependency in words.
+ */
+function renderIlsSubFilters(container) {
   const wrap = document.createElement("div");
-  wrap.className = "filter-group";
-  const label = document.createElement("div");
-  label.className = "filter-group-label";
-  const labelText = document.createElement("span");
-  labelText.textContent = "Facility Status";
-  const actions = groupActions(
-    () => {
-      for (const opt of filterOptions.facility_statuses) selected.facilityStatuses.add(opt.code);
-      renderFilters();
-      scheduleQuery();
-    },
-    () => {
-      selected.facilityStatuses.clear();
-      renderFilters();
-      scheduleQuery();
-    },
-  );
-  label.append(labelText, actions);
-  wrap.appendChild(label);
+  wrap.className = "subfilters";
 
-  for (const opt of filterOptions.facility_statuses) {
-    checkboxRow(wrap, opt.label, selected.facilityStatuses.has(opt.code), (checked) => {
-      if (checked) selected.facilityStatuses.add(opt.code);
-      else selected.facilityStatuses.delete(opt.code);
-      scheduleQuery();
+  const note = document.createElement("p");
+  note.className = "filter-note";
+  note.textContent = "These only narrow which ILS records show — unchecking \"ILS / Localizer\" excludes ILS entries outright regardless of these.";
+  wrap.appendChild(note);
+
+  for (const spec of [
+    {
+      title: "ILS Component Status",
+      options: filterOptions.ils_component_statuses,
+      selectedSet: selected.ilsStatuses,
+    },
+    {
+      title: "ILS System Type",
+      options: filterOptions.ils_system_types,
+      selectedSet: selected.ilsSystemTypes,
+    },
+  ]) {
+    const block = document.createElement("div");
+    block.className = "subfilter";
+
+    const label = document.createElement("div");
+    label.className = "subfilter-label";
+    label.textContent = spec.title;
+    const badge = document.createElement("span");
+    badge.className = "count-badge";
+    badge.textContent = spec.selectedSet.size > 0 ? `${spec.selectedSet.size} selected` : "";
+    label.appendChild(badge);
+    block.appendChild(label);
+
+    buildOptionList(block, {
+      options: spec.options,
+      selectedSet: spec.selectedSet,
+      searchable: false,
+      onChange: () => scheduleQuery(),
+      onSummaryChange: () => {
+        badge.textContent = spec.selectedSet.size > 0 ? `${spec.selectedSet.size} selected` : "";
+      },
     });
-  }
-
-  container.appendChild(wrap);
-}
-
-function renderIlsSystemTypeFilter(container) {
-  const wrap = document.createElement("div");
-  wrap.className = "filter-group";
-  const label = document.createElement("div");
-  label.className = "filter-group-label";
-  const labelText = document.createElement("span");
-  labelText.textContent = "ILS System Type";
-  const actions = groupActions(
-    () => {
-      for (const opt of filterOptions.ils_system_types) selected.ilsSystemTypes.add(opt.code);
-      renderFilters();
-      scheduleQuery();
-    },
-    () => {
-      selected.ilsSystemTypes.clear();
-      renderFilters();
-      scheduleQuery();
-    },
-  );
-  label.append(labelText, actions);
-  wrap.appendChild(label);
-
-  for (const opt of filterOptions.ils_system_types) {
-    checkboxRow(wrap, opt.label, selected.ilsSystemTypes.has(opt.code), (checked) => {
-      if (checked) selected.ilsSystemTypes.add(opt.code);
-      else selected.ilsSystemTypes.delete(opt.code);
-      scheduleQuery();
-    });
+    wrap.appendChild(block);
   }
 
   container.appendChild(wrap);
@@ -642,15 +749,21 @@ async function refreshCityOptions() {
   for (const c of [...selected.cities]) {
     if (!cities.includes(c)) selected.cities.delete(c);
   }
-  if (cityMultiSelect) cityMultiSelect.rerender(cities);
+  cityOptions = cities;
+  // Only re-render when the list is actually on screen; otherwise the
+  // next open picks up the new options anyway.
+  if (openGroup === "city") renderFilters();
 }
 
 function renderRadiusFilters(container) {
+  // Outside the accordion deliberately: this is a form you fill in, not
+  // a selection set you pick from, so there's no list to collapse and no
+  // "n selected" to summarise.
   const wrap = document.createElement("div");
-  wrap.className = "filter-group";
+  wrap.className = "radius-block";
   const label = document.createElement("div");
-  label.className = "filter-group-label";
-  label.innerHTML = "<span>Geographic radius</span>";
+  label.className = "filter-group-title";
+  label.textContent = "Geographic radius";
   wrap.appendChild(label);
 
   const list = document.createElement("div");
