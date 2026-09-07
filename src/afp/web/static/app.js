@@ -1329,13 +1329,48 @@ function renderResults(result) {
   body.innerHTML = "";
   for (const e of result.entries) {
     const tr = document.createElement("tr");
-    for (const val of [e.tag_name, e.freq_mhz.toFixed(3), e.group, `${e.airport_id} - ${e.airport_name}`, `${e.city}, ${e.state}`]) {
-      const td = document.createElement("td");
-      td.textContent = val;
-      tr.appendChild(td);
-    }
+
+    tr.appendChild(cell("cell-tag", e.tag_name));
+    tr.appendChild(cell("cell-freq", e.freq_mhz.toFixed(3)));
+
+    const groupTd = document.createElement("td");
+    const pill = document.createElement("span");
+    pill.className = "group-pill";
+    pill.textContent = e.group;
+    groupTd.appendChild(pill);
+    tr.appendChild(groupTd);
+
+    // Truncated columns carry the full text as a tooltip, since the
+    // ellipsis hides real content rather than decoration.
+    const airport = `${e.airport_id} - ${e.airport_name}`;
+    const airportTd = cell("cell-apt", airport);
+    airportTd.title = airport;
+    tr.appendChild(airportTd);
+
+    // City and state are separate elements so only the city truncates --
+    // the state code is two characters and identifies the region, so
+    // losing it to an ellipsis would cost more than the city name does.
+    const cityTd = document.createElement("td");
+    cityTd.className = "cell-city";
+    const cityName = document.createElement("span");
+    cityName.className = "city-name";
+    cityName.textContent = e.city;
+    const cityState = document.createElement("span");
+    cityState.className = "city-state";
+    cityState.textContent = e.state ? `, ${e.state}` : "";
+    cityTd.append(cityName, cityState);
+    cityTd.title = e.state ? `${e.city}, ${e.state}` : e.city;
+    tr.appendChild(cityTd);
+
     body.appendChild(tr);
   }
+}
+
+function cell(className, text) {
+  const td = document.createElement("td");
+  td.className = className;
+  td.textContent = text;
+  return td;
 }
 
 function updateGenerateButton(result) {

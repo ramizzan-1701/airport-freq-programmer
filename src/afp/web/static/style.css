@@ -60,7 +60,7 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   overflow: hidden; /* the two scroll containers own all scrolling */
 }
 
@@ -80,7 +80,7 @@ body {
 .btn {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 11.5px;
+  font-size: 12.5px;
   letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--ink2);
@@ -99,7 +99,7 @@ body {
 }
 .btn-primary:hover { color: var(--accInk); border-color: var(--acc); }
 
-.btn-small { font-size: 10.5px; letter-spacing: .08em; padding: 5px 10px; }
+.btn-small { font-size: 11.5px; letter-spacing: .08em; padding: 5px 10px; }
 
 .btn:disabled,
 .btn-primary:disabled {
@@ -112,7 +112,7 @@ body {
 /* Text-only action (remove links, select all / clear). */
 .text-action {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--acc);
   background: none;
   border: 0;
@@ -137,17 +137,17 @@ body {
   margin: 0;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--ink);
 }
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 
-.cycle-status { font-size: 10.5px; color: var(--ink2); }
+.cycle-status { font-size: 11.5px; color: var(--ink2); }
 
 .update-badge {
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 600;
   color: var(--custom);
   border: 1px solid var(--custom);
@@ -185,7 +185,7 @@ main#app > .workspace,
   margin: 0;
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: .18em;
   text-transform: uppercase;
   color: var(--acc);
@@ -195,7 +195,7 @@ main#app > .workspace,
   margin-left: auto;
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: .08em;
   text-transform: uppercase;
   color: var(--ink2);
@@ -216,7 +216,7 @@ main#app > .workspace,
   padding: 11px 16px 4px;
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: .2em;
   text-transform: uppercase;
   color: var(--ink3);
@@ -238,12 +238,12 @@ main#app > .workspace,
 .filter-group-title {
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: var(--ink);
 }
 .filter-group-summary {
   margin-top: 2px;
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--summary);
   white-space: nowrap;
   overflow: hidden;
@@ -255,7 +255,7 @@ main#app > .workspace,
 .filter-group-actions button {
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--ink3);
@@ -270,7 +270,7 @@ main#app > .workspace,
   flex: none;
   width: 12px;
   text-align: center;
-  font-size: 14px;
+  font-size: 15px;
   color: var(--ink3);
   align-self: center;
 }
@@ -278,7 +278,7 @@ main#app > .workspace,
 .filter-group-body { padding: 0 16px 14px; }
 
 .filter-note {
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.55;
   color: var(--ink3);
   margin: 0 0 9px;
@@ -304,7 +304,7 @@ main#app > .workspace,
   gap: 9px;
   padding: 7px 8px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.4;
   color: var(--ink2);
 }
@@ -338,7 +338,7 @@ main#app > .workspace,
   padding: 7px 9px;
   margin-bottom: 8px;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 12.5px;
   color: var(--ink);
 }
 .multiselect-search:focus { border-color: var(--acc); outline: none; }
@@ -346,19 +346,19 @@ main#app > .workspace,
 
 .multiselect-empty,
 .multiselect-overflow {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--ink3);
   padding: 6px 8px 0;
 }
 
-.count-badge { font-size: 10px; color: var(--ink3); }
+.count-badge { font-size: 11px; color: var(--ink3); }
 
 /* "Advanced: show raw values" and friends. */
 .more-btn {
   margin-top: 8px;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--ink2);
@@ -385,7 +385,7 @@ main#app > .workspace,
   margin-bottom: 6px;
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--ink2);
@@ -403,7 +403,7 @@ main#app > .workspace,
 .radius-item {
   display: flex;
   align-items: center;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink);
   border: 1px solid var(--line2);
   background: var(--input);
@@ -417,7 +417,7 @@ main#app > .workspace,
   background: none;
   border: 0;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1;
 }
 .radius-item button:hover { color: var(--warn); }
@@ -430,7 +430,7 @@ main#app > .workspace,
   border-radius: var(--radius);
   padding: 6px 8px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink);
   min-width: 0;
 }
@@ -463,12 +463,12 @@ main#app > .workspace,
 .count-number {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 44px;
+  font-size: 45px;
   line-height: 1;
   font-variant-numeric: tabular-nums;
   color: var(--ok);
 }
-.cap-text { font-size: 13px; color: var(--ink2); }
+.cap-text { font-size: 14px; color: var(--ink2); }
 
 .counter-bar {
   width: 250px;
@@ -479,7 +479,7 @@ main#app > .workspace,
 }
 .counter-bar span { display: block; height: 100%; background: var(--ok); }
 
-.counter-slots { margin-top: 8px; font-size: 10.5px; color: var(--ink3); }
+.counter-slots { margin-top: 8px; font-size: 11.5px; color: var(--ink3); }
 
 /* The number is coloured text; the bar's fill is a coloured background.
    Sharing one rule between them paints a filled block over the number. */
@@ -493,7 +493,7 @@ main#app > .workspace,
 .breakdown-label {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: .2em;
   text-transform: uppercase;
   color: var(--ink3);
@@ -501,7 +501,7 @@ main#app > .workspace,
 }
 .breakdown-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .breakdown-chip {
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--ink2);
   border: 1px solid var(--line2);
   background: var(--panel);
@@ -520,14 +520,14 @@ main#app > .workspace,
   align-items: flex-start;
 }
 #generate-btn {
-  font-size: 13px;
+  font-size: 14px;
   padding: 14px 18px;
   line-height: 1;
   align-self: flex-start;
 }
 #generate-hint {
   margin-top: 10px;
-  font-size: 10.5px;
+  font-size: 11.5px;
   line-height: 1.55;
   color: var(--ink3);
 }
@@ -546,19 +546,19 @@ main#app > .workspace,
 .custom-bar-title {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: .18em;
   text-transform: uppercase;
   color: var(--custom);
 }
-.custom-bar .muted { font-size: 11px; color: var(--ink2); }
+.custom-bar .muted { font-size: 12px; color: var(--ink2); }
 .custom-bar-actions { margin-left: auto; display: flex; gap: 8px; }
 
 /* band 3 -- results note */
 #results-note {
   flex: none;
   padding: 14px 28px 8px;
-  font-size: 11.5px;
+  font-size: 12.5px;
   color: var(--ink2);
 }
 
@@ -569,7 +569,7 @@ main#app > .workspace,
   border: 1px solid var(--warn);
   background: var(--input);
   color: var(--warn);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 .generate-errors ul { margin: 6px 0 0; padding-left: 18px; }
@@ -577,14 +577,54 @@ main#app > .workspace,
 /* band 4 -- results table */
 .results-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 28px 26px; }
 
-.results-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+/* table-layout: fixed is what makes ellipsis possible in a cell -- with
+   auto layout the column sizes itself to its content, so nothing ever
+   overflows to truncate. Widths are proportional so the columns hold
+   together as the window grows. */
+.results-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12.5px; }
+
+/* Sized so the fixed-width columns still hold their content at the
+   1000px minimum window, where the percentages are tightest: a Group
+   pill and the "Frequency" header both wrapped at 8%/11%. */
+.results-table th:nth-child(1), .results-table td:nth-child(1) { width: 17%; }  /* Tag */
+.results-table th:nth-child(2), .results-table td:nth-child(2) { width: 14%; }  /* Frequency */
+.results-table th:nth-child(3), .results-table td:nth-child(3) { width: 10%; }  /* Group */
+.results-table th:nth-child(4), .results-table td:nth-child(4) { width: 35%; }  /* Airport */
+.results-table th:nth-child(5), .results-table td:nth-child(5) { width: 24%; }  /* City, State */
+
+.results-table th { white-space: nowrap; }
+
+/* Tags are the one column that must never be cut: the tag is what the
+   user reads off the radio, and the widths above are sized so the
+   longest possible one (14 chars) fits whole. */
+.results-table .cell-tag { white-space: nowrap; }
+
+.results-table .cell-apt {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Only the city truncates; the state code stays whole.
+   The cell stays a normal table-cell -- making it a flex container
+   fights the fixed table layout and collapses the city to one
+   character. Instead the city is an inline-block capped just short of
+   the full width, leaving room for ", XX" to sit beside it. */
+.results-table .cell-city { white-space: nowrap; overflow: hidden; }
+.results-table .cell-city .city-name {
+  display: inline-block;
+  max-width: calc(100% - 4.5ch);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
 .results-table th {
   position: sticky;
   top: 0;
   background: var(--bg);
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 9.5px;
+  font-size: 10.5px;
   letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--ink3);
@@ -602,9 +642,13 @@ main#app > .workspace,
 .cell-apt  { color: var(--ink2); }
 .cell-city { color: var(--ink3); }
 .group-pill {
+  display: inline-block;
+  /* The group name is a range like "A-E"; letting it break at the hyphen
+     stacks it over two lines and pushes the row taller. */
+  white-space: nowrap;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 9.5px;
+  font-size: 10.5px;
   border: 1px solid var(--line2);
   background: var(--panel);
   color: var(--ink2);
@@ -629,21 +673,21 @@ main#app > .workspace,
   margin: 0;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 22px;
+  font-size: 23px;
   color: var(--ink);
 }
 .load-panel-box { border: 2px solid var(--line); background: var(--panel); }
 .load-panel-head { padding: 18px 24px 14px; border-bottom: 2px solid var(--line); }
-.load-panel-head p { margin: 8px 0 0; font-size: 11.5px; line-height: 1.6; color: var(--ink2); }
+.load-panel-head p { margin: 8px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--ink2); }
 .load-panel-body { padding: 16px 24px 20px; }
-.load-panel-body #fetch-btn { width: 100%; text-align: left; font-size: 13px; padding: 12px 16px; }
-.load-panel-body #fetch-status { margin: 10px 0 0; font-size: 11px; line-height: 1.6; color: var(--ink3); }
+.load-panel-body #fetch-btn { width: 100%; text-align: left; font-size: 14px; padding: 12px 16px; }
+.load-panel-body #fetch-status { margin: 10px 0 0; font-size: 12px; line-height: 1.6; color: var(--ink3); }
 
 .cycle-list { display: flex; flex-direction: column; margin-bottom: 12px; }
 .cycle-row {
   display: flex;
   align-items: center;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--ink);
   border: 1px solid var(--line);
   background: var(--input);
@@ -655,7 +699,7 @@ main#app > .workspace,
   font-family: var(--font-mono);
 }
 .cycle-row:hover { border-color: var(--acc); color: var(--acc); }
-.cycle-row .meta { margin-left: auto; font-size: 10.5px; color: var(--ink3); }
+.cycle-row .meta { margin-left: auto; font-size: 11.5px; color: var(--ink3); }
 
 /* ---------- modals ---------- */
 .modal-backdrop {
@@ -681,7 +725,7 @@ main#app > .workspace,
   margin: 0;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 18px;
+  font-size: 19px;
   line-height: 1.25;
   color: var(--ink);
 }
@@ -694,7 +738,7 @@ main#app > .workspace,
   background: var(--panel);
 }
 .modal-actions { display: flex; gap: 10px; padding: 14px 24px 18px; }
-.modal-actions .btn-primary { font-size: 12.5px; padding: 11px 16px; }
+.modal-actions .btn-primary { font-size: 13.5px; padding: 11px 16px; }
 
 /* Wide variant for the custom-entry list. */
 .modal-box.wide { width: 660px; max-height: 88%; }
@@ -709,20 +753,20 @@ main#app > .workspace,
 .setup-kicker {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: .16em;
   text-transform: uppercase;
   color: var(--warn);
   margin-bottom: 5px;
 }
-.setup-why p { margin: 0; font-size: 11px; line-height: 1.5; color: var(--ink2); }
+.setup-why p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink2); }
 
 .setup-step {
   display: flex;
   gap: 10px;
   padding: 12px 24px;
   border-bottom: 1px solid var(--line2);
-  font-size: 11.5px;
+  font-size: 12.5px;
   line-height: 1.55;
   color: var(--ink);
 }
@@ -735,7 +779,7 @@ main#app > .workspace,
   justify-content: center;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 11px;
+  font-size: 12px;
   background: var(--accSolid);
   color: var(--accInk);
 }
@@ -751,7 +795,7 @@ main#app > .workspace,
   background: var(--chrome);
   padding: 9px 14px;
   border-bottom: 1px solid var(--line);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--ink);
 }
@@ -763,11 +807,11 @@ main#app > .workspace,
   padding: 5px 14px;
   border-bottom: 1px solid var(--line2);
 }
-.slot-label { flex: none; width: 60px; font-size: 10.5px; color: var(--ink3); }
+.slot-label { flex: none; width: 60px; font-size: 11.5px; color: var(--ink3); }
 .slot-arrow { flex: none; color: var(--ink3); }
 .slot-name {
   flex: 1;
-  font-size: 13.5px;
+  font-size: 14.5px;
   font-weight: 600;
   letter-spacing: .04em;
   color: var(--ink);
@@ -775,7 +819,7 @@ main#app > .workspace,
 .copy-name {
   flex: none;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--acc);
   background: none;
   border: 1px solid var(--line2);
@@ -794,26 +838,26 @@ main#app > .workspace,
   align-items: flex-start;
   background: var(--input);
   padding: 9px 14px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.55;
   color: var(--ink2);
 }
 
 /* opt-out row on the pre-generate gate */
 .suppress-row { display: flex; align-items: center; gap: 9px; padding: 13px 24px 0; }
-.suppress-row label { display: flex; align-items: center; gap: 9px; font-size: 12px; color: var(--ink); cursor: pointer; }
+.suppress-row label { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--ink); cursor: pointer; }
 .suppress-row input[type="checkbox"] { width: 17px; height: 17px; margin: 0; accent-color: var(--acc); cursor: pointer; }
 
 /* ---------- custom entries modal ---------- */
-.modal-sub { margin: 8px 0 0; font-size: 11px; color: var(--ink3); }
+.modal-sub { margin: 8px 0 0; font-size: 12px; color: var(--ink3); }
 
-.modal-box table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.modal-box table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .modal-box thead th {
   background: var(--input);
   border-bottom: 1px solid var(--line);
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 9.5px;
+  font-size: 10.5px;
   letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--ink3);
@@ -828,16 +872,16 @@ main#app > .workspace,
 .modal-note {
   margin: 0;
   padding: 12px 24px 18px;
-  font-size: 10.5px;
+  font-size: 11.5px;
   line-height: 1.65;
   color: var(--ink3);
 }
 
 /* ---------- blocked import ---------- */
-.blocked-title { color: var(--warn) !important; font-size: 17px !important; }
+.blocked-title { color: var(--warn) !important; font-size: 18px !important; }
 .blocked-list { list-style: none; margin: 12px 0; padding: 0; border-top: 1px solid var(--line2); }
 .blocked-list li {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--ink);
   padding: 7px 0;
   border-bottom: 1px dashed var(--line2);
