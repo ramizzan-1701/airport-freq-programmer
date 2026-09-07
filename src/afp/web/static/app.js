@@ -906,12 +906,19 @@ function renderRadiusFilters(container) {
   const form = document.createElement("div");
   form.className = "radius-form";
   const centerInput = document.createElement("input");
-  centerInput.placeholder = "Airport ID or lat,lon";
+  centerInput.className = "radius-center";
+  // "Airport ID or lat,lon" doesn't fit any width this field can have in
+  // a 336px rail, so the second half moves to the tooltip rather than
+  // being silently clipped.
+  centerInput.placeholder = "Airport ID";
+  tip(centerInput, "An airport ID (LAX), or a latitude,longitude pair (33.94,-118.41).");
   const radiusInput = document.createElement("input");
+  radiusInput.className = "radius-nm";
   radiusInput.type = "number";
   radiusInput.placeholder = "NM";
   radiusInput.min = "0";
   const modeSelect = document.createElement("select");
+  modeSelect.className = "radius-mode";
   for (const [value, text] of [["include", "Include"], ["exclude", "Exclude"]]) {
     const opt = document.createElement("option");
     opt.value = value;

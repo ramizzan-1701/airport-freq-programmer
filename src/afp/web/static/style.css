@@ -463,8 +463,13 @@ main#app > .workspace,
 .radius-form input:focus,
 .radius-form select:focus { border-color: var(--acc); outline: none; }
 .radius-form input::placeholder { color: var(--ink3); }
-.radius-form .radius-center { flex: 1; }
-.radius-form .radius-nm { width: 52px; }
+
+/* The centre field takes whatever the fixed-width controls leave; the
+   others are sized to their actual content so nothing clips. */
+.radius-form .radius-center { flex: 1 1 auto; min-width: 0; }
+.radius-form .radius-nm { flex: none; width: 46px; }  /* 4 digits is the most anyone needs */
+.radius-form .radius-mode { flex: none; }
+.radius-form .btn { flex: none; padding: 6px 9px; }
 
 /* ---------- results panel ---------- */
 .results {
