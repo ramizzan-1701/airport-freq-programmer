@@ -396,12 +396,53 @@ body {
 
 .modal-actions { display: flex; gap: 10px; margin-top: 14px; }
 
+/* Modal whose body scrolls while its header and actions stay put.
+   Applied where the content can grow without bound (the imported-entry
+   list): with the default single-scroll box, the buttons sit *below* the
+   list, so a long import pushes Close/Re-import off-screen with nothing
+   indicating they're down there. */
+.modal-box.modal-split {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* the scrolling moves to .modal-scroll below */
+  padding-bottom: 0; /* the footer supplies its own bottom spacing */
+}
+
+.modal-split .modal-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  /* Without this a flex child refuses to shrink below its content size,
+     so the box grows past max-height instead of scrolling. */
+  min-height: 0;
+}
+
+.modal-split .modal-footer {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--border);
+  padding: 14px 0 20px;
+  background: var(--panel);
+}
+
+.modal-split .modal-footer .modal-actions { margin-top: 0; }
+
 .group-name-list { list-style: none; padding: 0; margin: 10px 0; }
 .group-name-list li {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   padding: 4px 0;
   border-bottom: 1px dashed var(--border);
   font-family: monospace;
   font-size: 13px;
 }
+
+/* Fixed width so the row doesn't jump when the label swaps to its
+   "copied" state, which is wider than the default. */
+.copy-name {
+  font-family: inherit;
+  min-width: 92px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.copy-name:disabled { opacity: 1; cursor: default; }

@@ -731,13 +731,13 @@ function renderCustomBar() {
 
   const title = document.createElement("span");
   title.className = "custom-bar-title";
-  title.textContent = "Custom Frequencies";
+  title.textContent = "Custom Frequencies (from your radio)";
   bar.appendChild(title);
 
   if (customEntries.length === 0) {
     const meta = document.createElement("span");
     meta.className = "muted";
-    meta.textContent = "None imported yet -- from your radio, not FAA data";
+    meta.textContent = "None imported yet";
     bar.appendChild(meta);
 
     const actions = document.createElement("span");
@@ -790,6 +790,11 @@ async function importCustomEntriesFile(file) {
   const body = await res.json();
   customEntries = body.entries;
   renderCustomBar();
+  // Show what actually came in. An import silently returning to the main
+  // page gives no confirmation of *which* entries were kept -- and the
+  // split matters here, since everything in the 6 generated group names
+  // is discarded on the way in.
+  openCustomEntriesModal();
   await runQuery();
 }
 
@@ -815,16 +820,38 @@ function openCustomEntriesModal() {
   const modal = document.getElementById("custom-entries-modal");
   const box = modal.querySelector(".modal-box");
   box.innerHTML = "";
+  // Header and actions stay put; only the entry list scrolls. This list
+  // is the one unbounded thing in any modal here -- it's however many
+  // entries the radio had.
+  box.classList.add("modal-split");
 
   const h2 = document.createElement("h2");
-  h2.textContent = "Custom Frequencies";
+  h2.textContent = "Custom Frequencies (from your radio)";
   box.appendChild(h2);
 
   const sub = document.createElement("p");
   sub.className = "muted";
   const groupCount = new Set(customEntries.map((e) => e.group)).size;
-  sub.textContent = `${customEntries.length} entries · ${groupCount} groups · imported from your radio`;
+  // Worded identically to the compact bar's summary -- same facts, and
+  // two phrasings for one thing read as two different things.
+  sub.textContent = `${customEntries.length} entries · ${groupCount} groups imported`;
   box.appendChild(sub);
+
+  const scroll = document.createElement("div");
+  scroll.className = "modal-scroll";
+
+  if (customEntries.length === 0) {
+    // Reachable right after an import: a file whose every entry sat in
+    // one of the 6 generated group names has all of it discarded, which
+    // otherwise shows up as an empty table with no explanation.
+    const empty = document.createElement("p");
+    empty.textContent = "No custom frequencies were kept from that file.";
+    scroll.appendChild(empty);
+    const why = document.createElement("p");
+    why.className = "muted";
+    why.textContent = "Every entry in it used one of the 6 group names this app generates, so they were treated as previously generated entries and discarded -- they'll be recreated when you generate. Only entries in your own group names are kept here.";
+    scroll.appendChild(why);
+  }
 
   const table = document.createElement("table");
   const thead = document.createElement("thead");
@@ -848,13 +875,24 @@ function openCustomEntriesModal() {
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
-  box.appendChild(table);
 
-  const note = document.createElement("p");
-  note.className = "muted";
-  note.textContent = "Note: placing a custom entry into one of the 6 fixed group names above will cause it to be discarded on the next import, since the app can't tell it apart from its own regenerated entries.";
-  box.appendChild(note);
+  // Both only make sense alongside actual rows: a bare header row reads
+  // as a broken table, and the note below refers to "the list above".
+  if (customEntries.length > 0) {
+    scroll.appendChild(table);
 
+    // Stays with the list rather than in the pinned footer -- it
+    // annotates the entries, and permanently occupying footer space
+    // would cost more than it's worth.
+    const note = document.createElement("p");
+    note.className = "muted";
+    note.textContent = "Note: placing a custom entry into one of the 6 fixed group names above will cause it to be discarded on the next import, since the app can't tell it apart from its own regenerated entries.";
+    scroll.appendChild(note);
+  }
+  box.appendChild(scroll);
+
+  const footer = document.createElement("div");
+  footer.className = "modal-footer";
   const actionsRow = document.createElement("div");
   actionsRow.className = "modal-actions";
   const clearBtn = document.createElement("button");
@@ -870,7 +908,8 @@ function openCustomEntriesModal() {
   closeBtn.textContent = "Close";
   closeBtn.addEventListener("click", () => modal.classList.add("hidden"));
   actionsRow.append(clearBtn, reimportBtn, closeBtn);
-  box.appendChild(actionsRow);
+  footer.appendChild(actionsRow);
+  box.appendChild(footer);
 
   modal.classList.remove("hidden");
 }
@@ -936,18 +975,39 @@ function appendGroupSetupInstructions(box) {
   list.className = "group-name-list";
   for (const name of fixedGroupNames) {
     const li = document.createElement("li");
-    li.textContent = name;
+    const label = document.createElement("span");
+    label.textContent = name;
+    // Per-name rather than one bulk copy: these get pasted into six
+    // separate YCE-64 fields, so a single comma-joined string can't
+    // actually be used. Typing them is easy enough, but a mistyped name
+    // fails silently -- YCE-64 just drops that entry's grouping.
+    li.append(label, copyNameButton(name));
     list.appendChild(li);
   }
   box.appendChild(list);
 }
 
-function copyNamesButton() {
+function copyNameButton(name) {
   const btn = document.createElement("button");
-  btn.className = "btn";
-  btn.textContent = "Copy names";
-  btn.addEventListener("click", () => {
-    navigator.clipboard?.writeText(fixedGroupNames.join(", "));
+  btn.className = "text-action copy-name";
+  btn.textContent = "⧉ copy";
+  btn.title = `Copy "${name}"`;
+  btn.setAttribute("aria-label", `Copy group name ${name}`);
+  btn.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(name);
+      btn.textContent = "✓ copied";
+    } catch {
+      // Clipboard access can be refused (permissions, insecure context).
+      // Say so rather than showing a success state for a copy that
+      // didn't happen -- the name is right there to type instead.
+      btn.textContent = "couldn't copy";
+    }
+    btn.disabled = true;
+    setTimeout(() => {
+      btn.textContent = "⧉ copy";
+      btn.disabled = false;
+    }, 1200);
   });
   return btn;
 }
@@ -970,7 +1030,7 @@ function showGroupSetupModal() {
   closeBtn.className = "btn btn-primary";
   closeBtn.textContent = "Close";
   closeBtn.addEventListener("click", () => modal.classList.add("hidden"));
-  actionsRow.append(copyNamesButton(), closeBtn);
+  actionsRow.append(closeBtn);
   box.appendChild(actionsRow);
 
   modal.classList.remove("hidden");
@@ -1048,7 +1108,7 @@ function confirmGroupSetupBeforeGenerate() {
       finish(true);
     });
 
-    actionsRow.append(copyNamesButton(), cancelBtn, proceedBtn);
+    actionsRow.append(cancelBtn, proceedBtn);
     box.appendChild(actionsRow);
 
     document.addEventListener("keydown", onKeydown);
