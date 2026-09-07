@@ -235,6 +235,7 @@ def create_app(cache_dir: Path) -> FastAPI:
             CategoryCountOut(
                 code=code,
                 label=classification.FREQ_CATEGORY_LABELS.get(code, code),
+                short_label=classification.short_freq_category_label(code),
                 count=n,
             )
             # Largest first, then by code so equal counts don't reorder

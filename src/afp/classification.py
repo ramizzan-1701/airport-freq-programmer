@@ -51,6 +51,42 @@ FREQ_CATEGORY_LABELS: dict[str, str] = {
     "ILS": "ILS / Localizer",
 }
 
+# Terse forms for places that show many categories side by side -- the
+# results breakdown, where the full labels are long enough that almost
+# every chip took its own line (17 categories filled 15 rows and half the
+# window). Mostly the cockpit shorthand a pilot would say out loud.
+#
+# These never replace FREQ_CATEGORY_LABELS: the filter list still spells
+# each one out, and anywhere a short form appears it carries the full
+# label as a tooltip. Any category without an entry here falls back to
+# its full label.
+FREQ_CATEGORY_SHORT_LABELS: dict[str, str] = {
+    "TOWER": "Tower",
+    "CLEARANCE": "Clearance",
+    "WEATHER_STATION": "Weather",
+    "APCH_DEP": "APCH/DEP",
+    "VOR": "VOR",
+    "VOT": "VOT",
+    "DME": "DME",
+    "RCAG": "RCAG",
+    "TRACON": "TRACON",
+    "FSS": "FSS",
+    "ARTCC": "ARTCC",
+    "MIL_GOV_OPS": "Mil/Gov",
+    "PROCEDURE_FIX": "STAR/DP",
+    "AIRSPACE_INFO": "Airspace",
+    "OTHER": "Other",
+    "ILS": "ILS",
+}
+
+
+def short_freq_category_label(code: str) -> str:
+    """Terse label for `code`, falling back to the full one (CTAF, NDB,
+    TACAN, UNICOM and Ground are already short enough to reuse as-is).
+    """
+    return FREQ_CATEGORY_SHORT_LABELS.get(code, FREQ_CATEGORY_LABELS.get(code, code))
+
+
 # spec §3: "Default UI view: CTAF, Tower, Ground, Clearance, Weather
 # Station, UNICOM, Approach/Departure, VOR, VOT. Everything else behind
 # an 'Advanced: show raw values' toggle." ILS added per user direction --

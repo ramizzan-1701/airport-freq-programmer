@@ -40,6 +40,91 @@ let customEntries = [];
 let groupSetupAcknowledged = false;
 let fixedGroupNames = [];
 
+// ---------- tooltips ----------
+
+/* Any element with data-tip="..." gets a tooltip on hover or keyboard
+ * focus. One delegated listener rather than per-element handlers, so
+ * markup rendered later (the filter rail re-renders constantly) is
+ * covered without re-wiring anything.
+ *
+ * Preferred over the native title attribute: that can't be styled, waits
+ * roughly half a second before appearing, and never shows for keyboard
+ * users at all.
+ */
+function initTooltips() {
+  const tip = document.createElement("div");
+  tip.id = "tooltip";
+  tip.setAttribute("role", "tooltip");
+  tip.hidden = true;
+  document.body.appendChild(tip);
+
+  let current = null;
+
+  function place(target) {
+    // Measure before placing: the tooltip flips above the target when
+    // there isn't room below, and is clamped so it never leaves the
+    // window on a narrow one.
+    const rect = target.getBoundingClientRect();
+    const tipRect = tip.getBoundingClientRect();
+    const gap = 7;
+
+    let top = rect.bottom + gap;
+    if (top + tipRect.height > window.innerHeight - 4) {
+      top = rect.top - tipRect.height - gap;
+    }
+    let left = rect.left;
+    if (left + tipRect.width > window.innerWidth - 8) {
+      left = window.innerWidth - tipRect.width - 8;
+    }
+
+    tip.style.top = `${Math.max(4, top)}px`;
+    tip.style.left = `${Math.max(4, left)}px`;
+  }
+
+  function show(target) {
+    const text = target.getAttribute("data-tip");
+    if (!text) return;
+    current = target;
+    tip.textContent = text;
+    tip.hidden = false;
+    place(target);
+    tip.classList.add("visible");
+  }
+
+  function hide() {
+    current = null;
+    tip.classList.remove("visible");
+    tip.hidden = true;
+  }
+
+  document.addEventListener("mouseover", (event) => {
+    const target = event.target.closest("[data-tip]");
+    if (target && target !== current) show(target);
+  });
+  document.addEventListener("mouseout", (event) => {
+    if (current && !current.contains(event.relatedTarget)) hide();
+  });
+  document.addEventListener("focusin", (event) => {
+    const target = event.target.closest("[data-tip]");
+    if (target) show(target);
+  });
+  document.addEventListener("focusout", hide);
+  // Anything that moves the page out from under a tooltip should dismiss
+  // it rather than leave it floating over unrelated content.
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape") hide(); });
+
+  // Follow the target rather than hiding: tabbing to an off-screen
+  // element scrolls it into view, and hiding on scroll would dismiss the
+  // tooltip that focus had just opened. Only give up once the target has
+  // actually scrolled out of sight.
+  window.addEventListener("scroll", () => {
+    if (!current) return;
+    const rect = current.getBoundingClientRect();
+    if (rect.bottom < 0 || rect.top > window.innerHeight) hide();
+    else place(current);
+  }, true);
+}
+
 function debounce(fn, ms) {
   return (...args) => {
     clearTimeout(queryDebounceTimer);
@@ -75,6 +160,7 @@ function buildFilterPayload() {
 // ---------- bootstrap ----------
 
 async function init() {
+  initTooltips();
   const status = await (await api("/api/status")).json();
   renderCycleStatus(status);
   groupSetupAcknowledged = status.group_setup_acknowledged;
@@ -1311,9 +1397,13 @@ function renderBreakdown(result) {
   for (const c of counts) {
     const chip = document.createElement("span");
     chip.className = "breakdown-chip";
+    // Short label on screen, full name on hover: 17 categories at full
+    // length filled 15 rows and half the window.
+    chip.setAttribute("data-tip", c.label);
+    chip.tabIndex = 0;
     const n = document.createElement("b");
     n.textContent = c.count;
-    chip.append(n, document.createTextNode(" " + c.label));
+    chip.append(n, document.createTextNode(" " + (c.short_label || c.label)));
     chips.appendChild(chip);
   }
   el.appendChild(chips);

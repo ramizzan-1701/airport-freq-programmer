@@ -116,6 +116,9 @@ class EntryOut(BaseModel):
 class CategoryCountOut(BaseModel):
     code: str
     label: str
+    # Terse form for the breakdown chips; `label` rides along as their
+    # tooltip so the full name is always one hover away.
+    short_label: str
     count: int
 
 

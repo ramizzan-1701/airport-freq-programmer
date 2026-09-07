@@ -594,3 +594,29 @@ def test_generate_merges_custom_entries_but_query_preview_stays_faa_only(client)
     assert res.status_code == 200
     assert b"<TAG_NAME>HOME-BASE</TAG_NAME>" in res.content
     assert b"<GROUP>PERSONAL</GROUP>" in res.content
+
+
+def test_query_returns_short_and_full_category_labels(client):
+    """The breakdown chips show the short form and carry the full label
+    as their tooltip, so both have to come back from one request.
+    """
+    body = client.post("/api/query", json={"mode": "smart"}).json()
+    by_code = {c["code"]: c for c in body["category_counts"]}
+    assert by_code, "expected at least one category in the breakdown"
+
+    for entry in by_code.values():
+        assert entry["label"], "full label is the tooltip text"
+        assert entry["short_label"], "short label is what renders"
+
+    # A category whose full name is long enough to have needed shortening
+    if "RCAG" in by_code:
+        assert by_code["RCAG"]["short_label"] == "RCAG"
+        assert by_code["RCAG"]["label"] == "Remote Comm Relay"
+
+
+def test_category_counts_sum_to_the_reported_count(client):
+    """The breakdown describes the whole result set, not the truncated
+    preview page -- so its counts must add up to `count`.
+    """
+    body = client.post("/api/query", json={"mode": "smart"}).json()
+    assert sum(c["count"] for c in body["category_counts"]) == body["count"]
