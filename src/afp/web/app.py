@@ -6,6 +6,7 @@ just request/response plumbing.
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import date
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from ..nasr.source import FetchResult
 from ..query import query as query_mod
 from ..selection import FIXED_GROUP_NAMES, orphan_tag_ids, select_entries
 from .models import (
+    CategoryCountOut,
     CustomEntriesOut,
     CustomEntryOut,
     EntryOut,
@@ -226,6 +228,20 @@ def create_app(cache_dir: Path) -> FastAPI:
                 )
             )
 
+        # Counted over every selected entry, not the truncated preview
+        # page -- the breakdown describes the whole result set.
+        by_category = Counter(e.category for e in entries if e.category)
+        category_counts = [
+            CategoryCountOut(
+                code=code,
+                label=classification.FREQ_CATEGORY_LABELS.get(code, code),
+                count=n,
+            )
+            # Largest first, then by code so equal counts don't reorder
+            # between two otherwise identical queries.
+            for code, n in sorted(by_category.items(), key=lambda kv: (-kv[1], kv[0]))
+        ]
+
         return QueryResultOut(
             count=len(entries),
             total_count=total_count,
@@ -235,6 +251,7 @@ def create_app(cache_dir: Path) -> FastAPI:
             truncated=len(entries) > MAX_DISPLAYED_ENTRIES,
             custom_entry_count=len(app_state.custom_entries),
             custom_group_count=len({e.group for e in app_state.custom_entries}),
+            category_counts=category_counts,
         )
 
     @app.post("/api/generate")

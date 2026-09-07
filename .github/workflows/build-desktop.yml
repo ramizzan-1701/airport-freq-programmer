@@ -97,7 +97,9 @@ jobs:
             "uvicorn/loops/asyncio.py" \
             "afp/web/static/index.html" \
             "afp/web/static/app.js" \
-            "afp/web/static/style.css"
+            "afp/web/static/style.css" \
+            "afp/web/static/fonts/chakra-petch-700.woff2" \
+            "afp/web/static/fonts/ibm-plex-mono-400.woff2"
           do
             if [ -e "$LIB/$path" ]; then
               echo "ok      $path"

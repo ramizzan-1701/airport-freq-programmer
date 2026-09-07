@@ -39,7 +39,10 @@ where = ["src"]
 # raises at import time ("Directory ... does not exist"). Editable
 # installs mask the problem by pointing back at the source tree.
 [tool.setuptools.package-data]
-"afp.web" = ["static/*"]
+# static/* alone does not match nested directories, so the self-hosted
+# fonts need their own line -- without it the packaged UI silently falls
+# back to system fonts.
+"afp.web" = ["static/*", "static/fonts/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

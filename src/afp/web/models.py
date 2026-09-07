@@ -113,6 +113,12 @@ class EntryOut(BaseModel):
     state: str
 
 
+class CategoryCountOut(BaseModel):
+    code: str
+    label: str
+    count: int
+
+
 class QueryResultOut(BaseModel):
     count: int
     total_count: int
@@ -122,6 +128,11 @@ class QueryResultOut(BaseModel):
     truncated: bool
     custom_entry_count: int
     custom_group_count: int
+    # Breakdown of `count` by frequency category, largest first. Covers
+    # every selected entry, not just the truncated preview page in
+    # `entries` -- it answers "what is actually in my 317?", which the
+    # preview alone can't when it stops at 500 rows.
+    category_counts: list[CategoryCountOut]
 
 
 class ValidationErrorOut(BaseModel):

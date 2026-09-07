@@ -29,9 +29,13 @@ raw-string matching for CTAF/Tower/Weather detection.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from .classification import ILS_SYSTEM_TYPE_LABELS, NON_SELECTABLE_CATEGORIES
+from .classification import (
+    ILS_PSEUDO_CATEGORY,
+    ILS_SYSTEM_TYPE_LABELS,
+    NON_SELECTABLE_CATEGORIES,
+)
 from .schema import Airport, Frequency, Ils, NormalizedData
 
 # ILS system-type and status priority for smart-mode "one entry per runway
@@ -158,6 +162,12 @@ class Entry:
     lon: float
     scan_memory: str = "Off"
     shift: str = "Off"
+    # The freq_category this entry came from, carried through so the UI can
+    # break a result set down by category. Defaults to "" because custom
+    # entries are parsed from a radio export that has no such concept --
+    # and because local_store round-trips these through JSON, where an
+    # older file simply won't have the key.
+    category: str = ""
 
 
 # The 6 fixed group names default_group_for ever returns -- exported as a
@@ -365,6 +375,7 @@ def _make_entry(f: Frequency, airport: Airport, freq_mhz: float, tag_counts: dic
         group="",
         lat=f.lat if f.lat is not None else airport.lat,
         lon=f.lon if f.lon is not None else airport.lon,
+        category=f.freq_category,
     )
 
 
@@ -443,6 +454,7 @@ def _ils_entries(airport: Airport, ils_rows: list[Ils], mode: str) -> list[Entry
                     group="",
                     lat=airport.lat,
                     lon=airport.lon,
+                    category=ILS_PSEUDO_CATEGORY,
                 )
             )
         return entries
@@ -466,6 +478,7 @@ def _ils_entries(airport: Airport, ils_rows: list[Ils], mode: str) -> list[Entry
                 group="",
                 lat=airport.lat,
                 lon=airport.lon,
+                category=ILS_PSEUDO_CATEGORY,
             )
         )
 
@@ -528,18 +541,10 @@ def select_entries(
         comm = _comm_entries(airport, freqs_by_airport.get(facility_id, []), mode)
         loc = _ils_entries(airport, ils_by_airport.get(facility_id, []), mode)
         group = default_group_for(facility_id)
-        for e in comm + loc:
-            entries.append(
-                Entry(
-                    tag_name=e.tag_name,
-                    freq_mhz=e.freq_mhz,
-                    group=group,
-                    lat=e.lat,
-                    lon=e.lon,
-                    scan_memory=e.scan_memory,
-                    shift=e.shift,
-                )
-            )
+        # replace() rather than re-listing every field: this only sets the
+        # group, and rebuilding by hand silently drops any field added to
+        # Entry later (it already lost `category` once).
+        entries.extend(replace(e, group=group) for e in comm + loc)
 
     return entries
 

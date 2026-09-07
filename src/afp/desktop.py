@@ -78,8 +78,11 @@ def main() -> int:
     webview.create_window(
         WINDOW_TITLE,
         f"http://127.0.0.1:{port}",
-        width=1400,
-        height=900,
+        # The size the UI was designed at. The layout tolerates larger
+        # (the rail is fixed at 336px and the results panel absorbs the
+        # rest), but this is the proportion it was composed for.
+        width=1180,
+        height=760,
         min_size=(1000, 700),
     )
     webview.start()  # blocks until the user closes the window

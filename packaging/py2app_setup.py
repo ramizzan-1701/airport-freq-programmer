@@ -18,6 +18,8 @@ The built app is unsigned: Gatekeeper blocks it on first open until the
 user right-click > Open, or it's signed with a paid Apple Developer ID.
 """
 
+from pathlib import Path
+
 from setuptools import Distribution, setup
 
 
@@ -57,6 +59,10 @@ DATA_FILES = [
             "src/afp/web/static/style.css",
         ],
     ),
+    # Self-hosted fonts, in their own destination directory so the
+    # url("fonts/...") references in style.css resolve. Globbed rather
+    # than listed so adding a weight doesn't silently miss the bundle.
+    ("afp/web/static/fonts", sorted(str(p) for p in Path("src/afp/web/static/fonts").glob("*.woff2"))),
 ]
 
 OPTIONS = {

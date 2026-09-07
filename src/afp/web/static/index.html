@@ -7,50 +7,68 @@
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <h1>Airport Frequency Programmer</h1>
-    <div class="topbar-right">
-      <button id="group-setup-link" class="btn btn-small">Group setup instructions</button>
-      <div id="cycle-status" class="cycle-status"></div>
-    </div>
-  </header>
-
   <main id="app">
+    <header class="topbar">
+      <h1>Airport Frequency Programmer</h1>
+      <div class="topbar-right">
+        <div id="cycle-status" class="cycle-status"></div>
+        <button id="group-setup-link" class="btn btn-small">Group setup instructions</button>
+      </div>
+    </header>
+
     <section id="load-panel" class="load-panel hidden">
-      <h2>Load NASR data</h2>
-      <p class="muted">Pick a previously downloaded cycle, or fetch the current one from the FAA.</p>
-      <div id="cycle-list" class="cycle-list"></div>
-      <button id="fetch-btn" class="btn btn-primary">Fetch latest from FAA&hellip;</button>
-      <p id="fetch-status" class="muted"></p>
+      <div class="load-panel-box">
+        <div class="load-panel-head">
+          <h2>Load NASR data</h2>
+          <p>Pick a previously downloaded cycle, or fetch the current one from the FAA.</p>
+        </div>
+        <div class="load-panel-body">
+          <div id="cycle-list" class="cycle-list"></div>
+          <button id="fetch-btn" class="btn btn-primary">Fetch latest from FAA&hellip;</button>
+          <p id="fetch-status"></p>
+        </div>
+      </div>
     </section>
 
     <div id="workspace" class="workspace hidden">
-      <aside id="filters" class="filters"></aside>
+      <aside class="filters">
+        <div class="filters-head">
+          <h2>Filters</h2>
+          <button id="clear-filters" class="clear-all">Clear all filters</button>
+        </div>
+        <div id="filters-body" class="filters-body"></div>
+      </aside>
 
       <section class="results">
-        <div id="counter" class="counter"></div>
+        <div class="results-head">
+          <div id="counter" class="counter"></div>
+          <div id="breakdown" class="breakdown"></div>
+          <div class="generate-row">
+            <button id="generate-btn" class="btn btn-primary">Generate XML</button>
+            <span id="generate-hint"></span>
+          </div>
+        </div>
 
         <div id="custom-bar" class="custom-bar"></div>
 
-        <div id="generate-row" class="generate-row">
-          <button id="generate-btn" class="btn btn-primary">Generate XML</button>
-          <span id="generate-hint" class="muted"></span>
-        </div>
         <div id="generate-errors" class="generate-errors hidden"></div>
 
-        <div id="results-note" class="muted"></div>
-        <table class="results-table">
-          <thead>
-            <tr>
-              <th>Tag</th>
-              <th>Frequency</th>
-              <th>Group</th>
-              <th>Airport</th>
-              <th>City, State</th>
-            </tr>
-          </thead>
-          <tbody id="results-body"></tbody>
-        </table>
+        <div id="results-note"></div>
+
+        <div class="results-body">
+          <table class="results-table">
+            <thead>
+              <tr>
+                <th>Tag</th>
+                <th>Frequency</th>
+                <th>Group</th>
+                <th>Airport</th>
+                <th>City, State</th>
+              </tr>
+            </thead>
+            <tbody id="results-body"></tbody>
+          </table>
+        </div>
       </section>
     </div>
   </main>
@@ -66,7 +84,7 @@
   </div>
 
   <div id="custom-entries-modal" class="modal-backdrop hidden">
-    <div class="modal-box"></div>
+    <div class="modal-box wide"></div>
   </div>
 
   <div id="blocked-import-modal" class="modal-backdrop hidden">

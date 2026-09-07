@@ -83,6 +83,7 @@ async function init() {
 
   document.getElementById("fetch-btn").addEventListener("click", doFetch);
   document.getElementById("group-setup-link").addEventListener("click", () => showGroupSetupModal());
+  document.getElementById("clear-filters").addEventListener("click", clearAllFilters);
   document.getElementById("custom-import-input").addEventListener("change", (e) => {
     const file = e.target.files[0];
     if (file) importCustomEntriesFile(file);
@@ -322,30 +323,28 @@ function createMultiSelect(container, { title, options, selectedSet, searchable 
   };
 }
 
-function renderFilters() {
-  const root = document.getElementById("filters");
-  root.innerHTML = "";
+function clearAllFilters() {
+  selected.states.clear();
+  selected.cities.clear();
+  selected.freqCategories.clear();
+  selected.platformTypes.clear();
+  selected.facilityStatuses.clear();
+  selected.includeNonSiteFacilities = false;
+  selected.ilsStatuses.clear();
+  selected.ilsSystemTypes.clear();
+  selected.radiusFilters = [];
+  selected.includePublic = true;
+  selected.includePrivate = false;
+  freqCategoryAdvancedExpanded = false;
+  renderFilters();
+  runQuery();
+}
 
-  const clearBtn = document.createElement("button");
-  clearBtn.className = "btn btn-small clear-all";
-  clearBtn.textContent = "Clear all filters";
-  clearBtn.addEventListener("click", () => {
-    selected.states.clear();
-    selected.cities.clear();
-    selected.freqCategories.clear();
-    selected.platformTypes.clear();
-    selected.facilityStatuses.clear();
-    selected.includeNonSiteFacilities = false;
-    selected.ilsStatuses.clear();
-    selected.ilsSystemTypes.clear();
-    selected.radiusFilters = [];
-    selected.includePublic = true;
-    selected.includePrivate = false;
-    freqCategoryAdvancedExpanded = false;
-    renderFilters();
-    runQuery();
-  });
-  root.appendChild(clearBtn);
+function renderFilters() {
+  // The rail's scroll container, not the rail itself: the "Filters"
+  // heading and "Clear all filters" live in a fixed header above it.
+  const root = document.getElementById("filters-body");
+  root.innerHTML = "";
 
   // --- Scope ---
   const scopeSection = section(root, "Scope");
@@ -1151,13 +1150,60 @@ function renderCounter(result) {
   const el = document.getElementById("counter");
   el.className = "counter " + (result.level === "green" ? "" : result.level);
   el.innerHTML = "";
+
+  const line = document.createElement("div");
+  line.className = "counter-line";
   const num = document.createElement("span");
   num.className = "count-number";
   num.textContent = result.total_count;
   const cap = document.createElement("span");
   cap.className = "cap-text";
   cap.textContent = `entries (cap ${result.cap})`;
-  el.append(num, cap);
+  line.append(num, cap);
+  el.appendChild(line);
+
+  const bar = document.createElement("div");
+  bar.className = "counter-bar";
+  const fill = document.createElement("span");
+  // Clamped so an over-cap result fills the bar rather than overflowing
+  // it; the count and the slots line below carry the actual overage.
+  fill.style.width = `${Math.min(100, (result.total_count / result.cap) * 100)}%`;
+  bar.appendChild(fill);
+  el.appendChild(bar);
+
+  const slots = document.createElement("div");
+  slots.className = "counter-slots";
+  const remaining = result.cap - result.total_count;
+  slots.textContent = remaining >= 0
+    ? `${remaining} slots remaining`
+    : `${-remaining} over the cap`;
+  el.appendChild(slots);
+
+  renderBreakdown(result);
+}
+
+function renderBreakdown(result) {
+  const el = document.getElementById("breakdown");
+  el.innerHTML = "";
+  const counts = result.category_counts || [];
+  if (counts.length === 0) return;
+
+  const label = document.createElement("div");
+  label.className = "breakdown-label";
+  label.textContent = "Frequency Category";
+  el.appendChild(label);
+
+  const chips = document.createElement("div");
+  chips.className = "breakdown-chips";
+  for (const c of counts) {
+    const chip = document.createElement("span");
+    chip.className = "breakdown-chip";
+    const n = document.createElement("b");
+    n.textContent = c.count;
+    chip.append(n, document.createTextNode(" " + c.label));
+    chips.appendChild(chip);
+  }
+  el.appendChild(chips);
 }
 
 function renderResults(result) {
