@@ -964,12 +964,25 @@ function showBlockedImportModal({ groups, found, available }) {
  */
 function appendGroupSetupInstructions(box) {
   const p1 = document.createElement("p");
-  p1.textContent = "YCE-64 can't create new groups -- it only has 9 fixed slots (GROUP1-GROUP9) that you rename. If a group name in the XML doesn't already exist in YCE-64, that entry's grouping is silently dropped.";
+  p1.textContent = "This app will sort frequencies into 6 alphabetized Groups for quick recall on your radio. The Yaesu YCE-64 editor can't create or edit Group names on import - they must already exist there, or that group's frequencies will be dropped.";
   box.appendChild(p1);
 
   const p2 = document.createElement("p");
-  p2.textContent = "Open YCE-64 -> Setup -> Memory Group Name, and rename 6 of the 9 slots to match these exactly (same six names for every export, regardless of filters):";
+  p2.textContent = "There are 9 Group slots available. Rename 6 of them:";
   box.appendChild(p2);
+
+  const steps = document.createElement("ol");
+  steps.className = "setup-steps";
+  for (const step of [
+    "Open the YCE-64 editor. Go to: Setup -> Memory Group Name.",
+    "Rename 6 of the 9 Groups to the following names - a one time setup",
+    "The remaining 3 Groups are yours - you can name them whatever you like for your own Custom frequencies.",
+  ]) {
+    const li = document.createElement("li");
+    li.textContent = step;
+    steps.appendChild(li);
+  }
+  box.appendChild(steps);
 
   const list = document.createElement("ul");
   list.className = "group-name-list";

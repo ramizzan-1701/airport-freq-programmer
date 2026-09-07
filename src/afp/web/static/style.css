@@ -425,6 +425,9 @@ body {
 
 .modal-split .modal-footer .modal-actions { margin-top: 0; }
 
+.setup-steps { margin: 10px 0; padding-left: 22px; }
+.setup-steps li { margin-bottom: 6px; line-height: 1.45; }
+
 .group-name-list { list-style: none; padding: 0; margin: 10px 0; }
 .group-name-list li {
   display: flex;
