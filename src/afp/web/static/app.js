@@ -51,6 +51,24 @@ let fixedGroupNames = [];
  * roughly half a second before appearing, and never shows for keyboard
  * users at all.
  */
+/** Attach a tooltip to `el`, marking it so there's a visible hint that
+ * more is available. Keyboard-reachable, since a tooltip nobody can tab
+ * to is only half a control.
+ */
+function tip(el, text) {
+  el.setAttribute("data-tip", text);
+  el.classList.add("has-tip");
+  // Only needs its own tab stop when it doesn't already contain or count
+  // as a focusable control -- the show handler walks up from whatever
+  // received focus, so a label wrapping a checkbox is already covered
+  // and adding a stop here would just double it.
+  const focusable = "input, button, a, select, textarea";
+  if (el.tabIndex < 0 && !el.matches(focusable) && !el.querySelector(focusable)) {
+    el.tabIndex = 0;
+  }
+  return el;
+}
+
 function initTooltips() {
   const tip = document.createElement("div");
   tip.id = "tooltip";
@@ -68,6 +86,7 @@ function initTooltips() {
     const tipRect = tip.getBoundingClientRect();
     const gap = 7;
 
+    // Prefer below the target, flip above when there's no room.
     let top = rect.bottom + gap;
     if (top + tipRect.height > window.innerHeight - 4) {
       top = rect.top - tipRect.height - gap;
@@ -76,6 +95,12 @@ function initTooltips() {
     if (left + tipRect.width > window.innerWidth - 8) {
       left = window.innerWidth - tipRect.width - 8;
     }
+
+    // Then clamp to the viewport on both axes. The flip alone isn't
+    // enough: the rail scrolls, so a target can sit below the fold
+    // entirely, and both candidate positions are then off-screen.
+    top = Math.min(top, window.innerHeight - tipRect.height - 4);
+    left = Math.min(left, window.innerWidth - tipRect.width - 8);
 
     tip.style.top = `${Math.max(4, top)}px`;
     tip.style.left = `${Math.max(4, left)}px`;
@@ -651,17 +676,17 @@ function renderNonSiteToggle(container) {
   const wrap = document.createElement("div");
   wrap.className = "non-site-block";
 
-  const note = document.createElement("p");
-  note.className = "filter-note";
-  note.textContent = "Site Type and Facility Status only apply to airports — non-site facilities (VOR, RCAG, TRACON, etc.) have neither, so narrowing either filter would otherwise exclude them entirely. Check this to keep them regardless of what's selected below.";
-  wrap.appendChild(note);
-
   const list = document.createElement("div");
   list.className = "multiselect-list";
-  checkboxRow(list, "Retain non-site facilities (VOR, TRACON, etc.)", selected.includeNonSiteFacilities, (checked) => {
+  const row = checkboxRow(list, "Retain non-site facilities (VOR, TRACON, etc.)", selected.includeNonSiteFacilities, (checked) => {
     selected.includeNonSiteFacilities = checked;
     scheduleQuery();
   });
+  // The why lives in a tooltip rather than three lines of prose above
+  // the control: the label already says what the checkbox does, and the
+  // reasoning is only wanted the first time.
+  tip(row.querySelector("label"),
+    "Site Type and Facility Status only apply to airports. Non-site facilities (VOR, RCAG, TRACON, etc.) have neither, so narrowing either filter would otherwise exclude them entirely.");
   wrap.appendChild(list);
   container.appendChild(wrap);
 }
@@ -769,10 +794,10 @@ function renderIlsSubFilters(container) {
   const wrap = document.createElement("div");
   wrap.className = "subfilters";
 
-  const note = document.createElement("p");
-  note.className = "filter-note";
-  note.textContent = "These only narrow which ILS records show — unchecking \"ILS / Localizer\" excludes ILS entries outright regardless of these.";
-  wrap.appendChild(note);
+  // The accent rule already says these belong to the ILS checkbox above;
+  // the caveat about unchecking it is the part worth keeping, and it
+  // reads better on hover than as a standing paragraph.
+  const SUB_TIP = "Only narrows which ILS records show. Unchecking \"ILS / Localizer\" excludes ILS entries outright, regardless of what's selected here.";
 
   for (const spec of [
     {
@@ -791,7 +816,10 @@ function renderIlsSubFilters(container) {
 
     const label = document.createElement("div");
     label.className = "subfilter-label";
-    label.textContent = spec.title;
+    const labelText = document.createElement("span");
+    labelText.textContent = spec.title;
+    tip(labelText, SUB_TIP);
+    label.appendChild(labelText);
     const badge = document.createElement("span");
     badge.className = "count-badge";
     badge.textContent = spec.selectedSet.size > 0 ? `${spec.selectedSet.size} selected` : "";
