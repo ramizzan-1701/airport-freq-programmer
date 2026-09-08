@@ -588,7 +588,7 @@ main#app > .workspace,
 .custom-bar-title {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: .18em;
   text-transform: uppercase;
   color: var(--custom);
