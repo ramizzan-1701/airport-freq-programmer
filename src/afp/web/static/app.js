@@ -342,7 +342,7 @@ function normalizeOptions(options) {
 /** The option list for one open accordion group: optional search box,
  * then the checkboxes. The group header (title, summary, Select all /
  * Clear, caret) is the accordion's job -- this only fills the body. */
-function buildOptionList(container, { options, selectedSet, searchable = true, onChange, onSummaryChange }) {
+function buildOptionList(container, { options, selectedSet, searchable = true, showCode = true, onChange, onSummaryChange }) {
   options = normalizeOptions(options);
 
   let searchInput = null;
@@ -389,7 +389,11 @@ function buildOptionList(container, { options, selectedSet, searchable = true, o
         if (onSummaryChange) onSummaryChange();
         onChange();
       });
-      const text = opt.code === opt.label ? opt.label : `${opt.code} - ${opt.label}`;
+      // The code earns its place where it is the thing a pilot reads on a
+      // chart or in the NASR tables -- a state's "CA", an ILS "LS". Where
+      // it is only the internal enum spelling of the label beside it
+      // ("NON_TOWERED - Non-Towered Airport"), showCode drops it.
+      const text = !showCode || opt.code === opt.label ? opt.label : `${opt.code} - ${opt.label}`;
       lbl.append(cb, document.createTextNode(text));
       list.appendChild(lbl);
     }
@@ -714,6 +718,7 @@ function renderFiltersInner() {
         options: filterOptions.facility_statuses,
         selectedSet: selected.facilityStatuses,
         searchable: false,
+        showCode: false,
         onChange: () => scheduleQuery(),
         onSummaryChange: refreshOpenGroupSummary,
       });
