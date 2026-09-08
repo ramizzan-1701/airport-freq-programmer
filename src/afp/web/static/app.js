@@ -474,14 +474,10 @@ function accordionGroup(container, { key, title, summary, actions, buildBody }) 
     // that changed. Pin it: note where it sits on screen, then absorb
     // the difference into the scroll offset so it stays under the
     // pointer that clicked it.
-    const scroller = document.getElementById("filters-body");
     const before = head.getBoundingClientRect().top;
     openGroup = isOpen ? null : key;
     renderFilters();
-    const rebuilt = scroller.querySelector(`.filter-group-label[data-group-key="${key}"]`);
-    // Clamps on its own when collapsing leaves too little to scroll --
-    // as close as the container allows is the best available answer.
-    if (rebuilt) scroller.scrollTop += rebuilt.getBoundingClientRect().top - before;
+    anchorGroupHeader(key, before);
   }
   head.addEventListener("click", toggle);
   head.addEventListener("keydown", (event) => {
@@ -507,6 +503,40 @@ function accordionGroup(container, { key, title, summary, actions, buildBody }) 
  * an empty set actually means -- no narrowing, everything passes. */
 function setSummary(selectedSet, emptyText) {
   return selectedSet.size > 0 ? `${selectedSet.size} selected` : emptyText;
+}
+
+/** Height of the filler below the last group, in px.
+ *
+ * Collapsing a group can leave the rail shorter than its own viewport,
+ * and a container with no scroll range left cannot hold a header
+ * anywhere but its natural resting place -- which is what made a
+ * collapse still shift the clicked header a few pixels. The filler buys
+ * back exactly the missing range and no more, so the empty space below
+ * the last group is only ever as tall as the anchoring actually needs.
+ */
+let railFillerPx = 0;
+
+/** Puts the header for `key` back where it was on screen before the rail
+ * was rebuilt, growing the filler if the scroll range falls short.
+ */
+function anchorGroupHeader(key, beforeTop) {
+  const scroller = document.getElementById("filters-body");
+  const rebuilt = scroller.querySelector(`.filter-group-label[data-group-key="${key}"]`);
+  const filler = scroller.querySelector(".filters-filler");
+  if (!rebuilt || !filler) return;
+
+  // Overshoot first. scrollHeight never reports less than clientHeight,
+  // so a rail shorter than its own viewport measures as exactly full and
+  // hides how much room is missing -- which is why the first cut of this
+  // still left the header a few px out. With the filler already taller
+  // than the gap, both the position and the height below are truthful.
+  filler.style.height = `${scroller.clientHeight}px`;
+  const wanted = scroller.scrollTop + (rebuilt.getBoundingClientRect().top - beforeTop);
+  const contentBelow = scroller.scrollHeight - filler.offsetHeight - scroller.clientHeight;
+
+  railFillerPx = Math.max(0, Math.ceil(wanted - contentBelow));
+  filler.style.height = `${railFillerPx}px`;
+  scroller.scrollTop = wanted;
 }
 
 /** Rebuilds the rail, keeping the scroll where the user left it.
@@ -689,6 +719,13 @@ function renderFiltersInner() {
       });
     },
   });
+
+  // Kept across rebuilds at its current height: a checkbox tick must not
+  // drop the range the open group's anchoring is relying on.
+  const filler = document.createElement("div");
+  filler.className = "filters-filler";
+  filler.style.height = `${railFillerPx}px`;
+  root.appendChild(filler);
 }
 
 /** Updates the open group's summary in place after a checkbox toggle, so
