@@ -1,7 +1,7 @@
 # Airport Frequency Programmer
 
 Turns the FAA's 28-Day NASR aeronautical data into a radio-memory XML file for the
-**Yaesu FTA-850L**, loadable through Yaesu's YCE-64 programming software.
+**Yaesu FTA-850** (850L and 850AA), loadable through Yaesu's YCE-64 programming software.
 
 Downloading the nationwide NASR dataset yields far more frequencies than the radio's
 400-memory limit, so the app is built around filtering it down: pick states, cities, a

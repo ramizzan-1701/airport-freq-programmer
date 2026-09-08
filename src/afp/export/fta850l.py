@@ -6,7 +6,7 @@ software. Values confirmed by hand against the actual software:
 from .profile import ExportProfile
 
 FTA_850L = ExportProfile(
-    name="FTA-850L / YCE-64",
+    name="FTA-850 / YCE-64",
     max_tag_length=14,
     max_entries=400,
 )

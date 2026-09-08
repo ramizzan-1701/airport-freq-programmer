@@ -754,7 +754,7 @@ function renderFreqCategoryFilter(container) {
           scheduleQuery();
         });
         let text = opt.label;
-        if (opt.not_usable_on_fta_850l) text += " — not usable on FTA-850L";
+        if (opt.not_usable_on_fta_850l) text += " — not usable on FTA-850";
         lbl.append(cb, document.createTextNode(text));
         return lbl;
       }
@@ -1168,7 +1168,7 @@ function showBlockedImportModal({ groups, found, available }) {
   scroll.className = "modal-scroll blocked-body";
 
   const p1 = document.createElement("p");
-  p1.textContent = `Your imported file uses more distinct custom group names than the radio has room for. The FTA-850L has 9 total slots -- 6 are permanently reserved for this app's standard scheme, leaving ${available} remaining slots for anything else.`;
+  p1.textContent = `Your imported file uses more distinct custom group names than the radio has room for. The FTA-850 has 9 total slots -- 6 are permanently reserved for this app's standard scheme, leaving ${available} remaining slots for anything else.`;
   scroll.appendChild(p1);
 
   // The offending names listed plainly: the remedy below asks the user
