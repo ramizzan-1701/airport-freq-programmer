@@ -60,7 +60,7 @@ def test_tag_name_over_max_length_is_rejected():
         build_xml([entry], profile)
 
 
-def test_duplicate_tag_names_are_rejected():
+def test_duplicate_tag_names_within_one_group_are_rejected():
     profile = ExportProfile(name="Test", max_tag_length=14, max_entries=400)
     entries = [
         Entry(tag_name="SNS-CTAF", freq_mhz=122.8, group="G", lat=1.0, lon=-1.0),
@@ -70,6 +70,24 @@ def test_duplicate_tag_names_are_rejected():
     assert any("duplicate" in p.lower() for p in problems)
     with pytest.raises(ExportValidationError):
         build_xml(entries, profile)
+
+
+def test_the_same_tag_in_two_different_groups_is_allowed():
+    """A custom group is frequently a shortlist of frequencies the user
+    already has in a generated group -- the whole point of spec §5 step 9
+    not deduplicating custom entries. Rejecting that would make the file
+    ungeneratable for anyone who keeps one.
+    """
+    profile = ExportProfile(name="Test", max_tag_length=14, max_entries=400)
+    entries = [
+        Entry(tag_name="SNS-CTAF", freq_mhz=122.8, group="P-T", lat=1.0, lon=-1.0),
+        Entry(tag_name="SNS-CTAF", freq_mhz=122.8, group="Local", lat=1.0, lon=-1.0),
+    ]
+    assert validate(entries, profile) == []
+    xml = build_xml(entries, profile)
+    assert xml.count(b"<TAG_NAME>SNS-CTAF</TAG_NAME>") == 2
+    assert b"<GROUP>P-T</GROUP>" in xml
+    assert b"<GROUP>Local</GROUP>" in xml
 
 
 def test_entry_count_over_cap_is_rejected():

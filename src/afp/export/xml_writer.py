@@ -5,8 +5,12 @@ Encodes the lessons learned building this by hand as validation checks
   - UTF-8 BOM required before the XML declaration, or YCE-64 rejects the
     file.
   - FREQUENCY must render with exactly 3 decimal places.
-  - TAG_NAME must not exceed the profile's max length and must be unique
-    within the file.
+  - TAG_NAME must not exceed the profile's max length, and must be unique
+    within its GROUP. Not within the file: a custom group is often just a
+    user's shortlist of frequencies they already have elsewhere, so the
+    same tag legitimately appears in both that group and a generated one
+    (spec §5 step 9 keeps custom entries un-deduplicated for exactly this
+    reason). A repeat inside one group is still a collision.
   - Total entry count over the profile's cap causes an outright import
     failure on the radio (not a partial import) -- so we refuse to
     generate rather than silently truncate.
@@ -32,16 +36,17 @@ class ExportValidationError(Exception):
 
 def validate(entries: list[Entry], profile: ExportProfile) -> list[str]:
     problems: list[str] = []
-    seen: set[str] = set()
+    seen: set[tuple[str, str]] = set()
     for e in entries:
         if len(e.tag_name) > profile.max_tag_length:
             problems.append(
                 f"tag '{e.tag_name}' is {len(e.tag_name)} chars, "
                 f"exceeds {profile.name} max of {profile.max_tag_length}"
             )
-        if e.tag_name in seen:
-            problems.append(f"duplicate tag name: '{e.tag_name}'")
-        seen.add(e.tag_name)
+        key = (e.group, e.tag_name)
+        if key in seen:
+            problems.append(f"duplicate tag name in group '{e.group}': '{e.tag_name}'")
+        seen.add(key)
 
     if len(entries) > profile.max_entries:
         problems.append(
@@ -64,7 +69,8 @@ def build_xml(entries: list[Entry], profile: ExportProfile) -> bytes:
     """Build the full YCE-64-importable XML file, BOM included.
 
     Raises ExportValidationError (never truncates/renames) if entries
-    violate the profile's tag-length, uniqueness, or entry-count rules.
+    violate the profile's tag-length, per-group uniqueness, or entry-count
+    rules.
     """
     problems = validate(entries, profile)
     if problems:
