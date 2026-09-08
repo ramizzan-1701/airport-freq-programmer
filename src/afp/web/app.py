@@ -199,14 +199,36 @@ def create_app(cache_dir: Path) -> FastAPI:
         entries = select_entries(filtered_data, mode=body.mode, include_public=True, include_private=True)
 
         # The radio's cap applies to filtered + held custom entries
-        # together (spec §5 step 7) -- but the preview table below stays
-        # FAA-only, since custom entries are never mixed into it (only
-        # visible via the compact bar / "Open" modal).
-        total_count = len(entries) + len(app_state.custom_entries)
+        # together (spec §5 step 7), and the preview lists them together
+        # too, in the same order /api/generate writes them to the XML --
+        # the table is meant to be a picture of the file about to be
+        # produced, so an entry that lands in the file belongs in it.
+        all_entries = entries + app_state.custom_entries
+        total_count = len(all_entries)
         status_result = counter_status(total_count, FTA_850L)
-        display = entries[:MAX_DISPLAYED_ENTRIES]
+        display = all_entries[:MAX_DISPLAYED_ENTRIES]
+        # Everything from this index on came out of the user's radio.
+        custom_start = len(entries)
         entries_out = []
-        for e in display:
+        for i, e in enumerate(display):
+            if i >= custom_start:
+                # No airport lookup: the tag prefix of a hand-added entry
+                # is whatever the user typed into the radio, so matching
+                # it against FAA records would attach a real airport's
+                # name and city to a row that never came from one.
+                entries_out.append(
+                    EntryOut(
+                        tag_name=e.tag_name,
+                        freq_mhz=e.freq_mhz,
+                        group=e.group,
+                        airport_id="",
+                        airport_name="",
+                        city="",
+                        state="",
+                        is_custom=True,
+                    )
+                )
+                continue
             airport_id = e.tag_name.split("-", 1)[0]
             airport = airports_by_id.get(airport_id)
             if airport is not None:
@@ -242,6 +264,20 @@ def create_app(cache_dir: Path) -> FastAPI:
             # between two otherwise identical queries.
             for code, n in sorted(by_category.items(), key=lambda kv: (-kv[1], kv[0]))
         ]
+        # Pinned last rather than sorted in by size: custom entries have no
+        # freq_category at all (they are parsed from a radio export, which
+        # has no such concept), so this is a residue bucket, not a peer of
+        # the categories above it. Without it the chips would sum to less
+        # than the count they are describing.
+        if app_state.custom_entries:
+            category_counts.append(
+                CategoryCountOut(
+                    code=classification.CUSTOM_PSEUDO_CATEGORY,
+                    label="Custom (from your radio)",
+                    short_label="Custom",
+                    count=len(app_state.custom_entries),
+                )
+            )
 
         return QueryResultOut(
             count=len(entries),

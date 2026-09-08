@@ -1545,30 +1545,39 @@ function renderBreakdown(result) {
 
 function renderResults(result) {
   const note = document.getElementById("results-note");
+  // total_count, not count: the table lists the filtered FAA entries and
+  // the held custom ones together, which is what total_count measures and
+  // what the counter above the table already shows.
+  const shown = result.total_count;
   note.textContent = result.truncated
-    ? `Showing first ${result.entries.length} of ${result.count} entries.`
-    : (result.count > 0 ? `Showing all ${result.count} entries.` : "No entries match the current filters.");
+    ? `Showing first ${result.entries.length} of ${shown} entries.`
+    : (shown > 0 ? `Showing all ${shown} entries.` : "No entries match the current filters.");
 
   const body = document.getElementById("results-body");
   body.innerHTML = "";
   for (const e of result.entries) {
     const tr = document.createElement("tr");
+    if (e.is_custom) tr.className = "row-custom";
 
     tr.appendChild(cell("cell-tag", e.tag_name));
     tr.appendChild(cell("cell-freq", e.freq_mhz.toFixed(3)));
 
     const groupTd = document.createElement("td");
     const pill = document.createElement("span");
-    pill.className = "group-pill";
+    pill.className = e.is_custom ? "group-pill custom" : "group-pill";
     pill.textContent = e.group;
     groupTd.appendChild(pill);
     tr.appendChild(groupTd);
 
     // Truncated columns carry the full text as a tooltip, since the
     // ellipsis hides real content rather than decoration.
-    const airport = `${e.airport_id} - ${e.airport_name}`;
-    const airportTd = cell("cell-apt", airport);
-    airportTd.title = airport;
+    // A custom entry has no airport behind it, so the column says where
+    // the row came from instead of rendering an empty " - ".
+    const airport = e.is_custom ? "From your radio" : `${e.airport_id} - ${e.airport_name}`;
+    const airportTd = cell(e.is_custom ? "cell-apt cell-custom-note" : "cell-apt", airport);
+    airportTd.title = e.is_custom
+      ? "Preserved from the file you imported -- not from FAA data."
+      : airport;
     tr.appendChild(airportTd);
 
     // City and state are separate elements so only the city truncates --

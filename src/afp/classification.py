@@ -102,6 +102,11 @@ ALL_FREQ_CATEGORIES: tuple[str, ...] = tuple(FREQ_CATEGORY_LABELS.keys())
 
 ILS_PSEUDO_CATEGORY = "ILS"
 
+# Not a freq_category the FAA data ever carries -- a bucket the result
+# breakdown uses for entries preserved from the user's own radio, which
+# have no category of their own.
+CUSTOM_PSEUDO_CATEGORY = "CUSTOM"
+
 # spec §3: NDB family is below the VHF aviation band -- flag as not
 # usable on the FTA-850L rather than silently including it.
 NOT_USABLE_ON_FTA_850L: frozenset[str] = frozenset({"NDB"})

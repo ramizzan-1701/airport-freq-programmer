@@ -124,6 +124,9 @@ class EntryOut(BaseModel):
     airport_name: str
     city: str
     state: str
+    # Preserved from the user's radio rather than derived from FAA data.
+    # Carries no airport, city or state -- the fields above are empty.
+    is_custom: bool = False
 
 
 class CategoryCountOut(BaseModel):

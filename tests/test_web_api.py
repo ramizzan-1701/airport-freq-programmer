@@ -583,17 +583,60 @@ def test_query_zero_faa_matches_with_custom_entries_still_generatable_shape(clie
     assert result["total_count"] == 1
 
 
-def test_generate_merges_custom_entries_but_query_preview_stays_faa_only(client):
+def test_generate_merges_custom_entries_and_the_preview_lists_them_too(client):
+    """The preview table is meant to be a picture of the XML about to be
+    written, so an entry that reaches the file has to reach the table --
+    in the same order, custom entries last.
+    """
     xml = _custom_xml([Entry(tag_name="HOME-BASE", freq_mhz=122.725, group="PERSONAL", lat=1.0, lon=-1.0)])
     client.post("/api/custom-entries/import", content=xml, headers={"Content-Type": "application/xml"})
 
     query_result = client.post("/api/query", json={}).json()
-    assert "HOME-BASE" not in {e["tag_name"] for e in query_result["entries"]}
+    tags = [e["tag_name"] for e in query_result["entries"]]
+    assert "HOME-BASE" in tags
+    assert tags[-1] == "HOME-BASE", "custom entries come after the FAA ones, as in the XML"
+    assert len(query_result["entries"]) == query_result["total_count"]
 
     res = client.post("/api/generate", json={})
     assert res.status_code == 200
     assert b"<TAG_NAME>HOME-BASE</TAG_NAME>" in res.content
     assert b"<GROUP>PERSONAL</GROUP>" in res.content
+
+
+def test_preview_flags_custom_rows_and_leaves_their_airport_fields_empty(client):
+    """The tag prefix of a hand-added entry is whatever the user typed
+    into the radio. Looking it up would caption the row with a real
+    airport's name and city that the entry never came from.
+    """
+    xml = _custom_xml([Entry(tag_name="AAA-MINE", freq_mhz=122.725, group="PERSONAL", lat=1.0, lon=-1.0)])
+    client.post("/api/custom-entries/import", content=xml, headers={"Content-Type": "application/xml"})
+
+    entries = client.post("/api/query", json={}).json()["entries"]
+    custom = [e for e in entries if e["tag_name"] == "AAA-MINE"]
+    assert len(custom) == 1
+    row = custom[0]
+    assert row["is_custom"] is True
+    # "AAA" is a real airport in the fixture data -- the row must not
+    # borrow its name.
+    assert (row["airport_id"], row["airport_name"], row["city"], row["state"]) == ("", "", "", "")
+
+    faa = [e for e in entries if not e["is_custom"]]
+    assert faa and all(e["airport_id"] for e in faa), "FAA rows keep their airport"
+
+
+def test_category_counts_include_a_custom_bucket_and_still_sum_to_the_total(client):
+    xml = _custom_xml([
+        Entry(tag_name="HOME-BASE", freq_mhz=122.725, group="PERSONAL", lat=1.0, lon=-1.0),
+        Entry(tag_name="CABIN-WX", freq_mhz=162.550, group="PERSONAL", lat=1.0, lon=-1.0),
+    ])
+    client.post("/api/custom-entries/import", content=xml, headers={"Content-Type": "application/xml"})
+
+    body = client.post("/api/query", json={}).json()
+    by_code = {c["code"]: c for c in body["category_counts"]}
+    assert by_code["CUSTOM"]["count"] == 2
+    assert by_code["CUSTOM"]["short_label"] == "Custom"
+    assert body["category_counts"][-1]["code"] == "CUSTOM", "pinned last, not sorted by size"
+    assert sum(c["count"] for c in body["category_counts"]) == body["total_count"]
 
 
 def test_query_returns_short_and_full_category_labels(client):
@@ -616,9 +659,11 @@ def test_query_returns_short_and_full_category_labels(client):
 
 def test_category_counts_sum_to_the_reported_count(client):
     """The breakdown describes the whole result set, not the truncated
-    preview page -- so its counts must add up to `count`.
+    preview page -- so its counts must add up. With no custom entries
+    held, `count` and `total_count` are the same number.
     """
     body = client.post("/api/query", json={"mode": "smart"}).json()
+    assert body["count"] == body["total_count"]
     assert sum(c["count"] for c in body["category_counts"]) == body["count"]
 
 

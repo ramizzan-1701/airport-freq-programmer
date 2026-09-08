@@ -699,6 +699,15 @@ main#app > .workspace,
 }
 .group-pill.custom { border-color: var(--custom); color: var(--custom); }
 
+/* Rows preserved from the user's radio, listed after the FAA results in
+   the same order the XML writes them. Marked, not highlighted: they are
+   ordinary rows of the same table, so only the "From your radio" note
+   carries the accent -- a full-row tint would read as a warning. */
+.results-table tr.row-custom .cell-custom-note {
+  color: var(--custom);
+  font-style: italic;
+}
+
 /* ---------- load panel (first run / update) ---------- */
 .load-panel {
   position: absolute;
