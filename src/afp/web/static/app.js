@@ -688,7 +688,7 @@ function renderNonSiteToggle(container) {
 
   const list = document.createElement("div");
   list.className = "multiselect-list";
-  const row = checkboxRow(list, "Retain non-site facilities (VOR, TRACON, etc.)", selected.includeNonSiteFacilities, (checked) => {
+  const row = checkboxRow(list, "Retain non-site facilities", selected.includeNonSiteFacilities, (checked) => {
     selected.includeNonSiteFacilities = checked;
     scheduleQuery();
   });
