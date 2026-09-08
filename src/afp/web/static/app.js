@@ -444,6 +444,8 @@ function accordionGroup(container, { key, title, summary, actions, buildBody }) 
   head.tabIndex = 0;
   head.setAttribute("role", "button");
   head.setAttribute("aria-expanded", String(isOpen));
+  // Lets toggle() find this same header again after the rail is rebuilt.
+  head.dataset.groupKey = key;
 
   const main = document.createElement("div");
   main.className = "filter-group-main";
@@ -466,8 +468,20 @@ function accordionGroup(container, { key, title, summary, actions, buildBody }) 
   head.appendChild(caret);
 
   function toggle() {
+    // Expanding or collapsing changes the height of everything above
+    // this row -- and with one group open at a time, opening one closes
+    // another, which can move this header even when it is not the one
+    // that changed. Pin it: note where it sits on screen, then absorb
+    // the difference into the scroll offset so it stays under the
+    // pointer that clicked it.
+    const scroller = document.getElementById("filters-body");
+    const before = head.getBoundingClientRect().top;
     openGroup = isOpen ? null : key;
     renderFilters();
+    const rebuilt = scroller.querySelector(`.filter-group-label[data-group-key="${key}"]`);
+    // Clamps on its own when collapsing leaves too little to scroll --
+    // as close as the container allows is the best available answer.
+    if (rebuilt) scroller.scrollTop += rebuilt.getBoundingClientRect().top - before;
   }
   head.addEventListener("click", toggle);
   head.addEventListener("keydown", (event) => {
@@ -495,7 +509,22 @@ function setSummary(selectedSet, emptyText) {
   return selectedSet.size > 0 ? `${selectedSet.size} selected` : emptyText;
 }
 
+/** Rebuilds the rail, keeping the scroll where the user left it.
+ *
+ * Every one of the ~20 callers below rebuilds the whole rail, and
+ * emptying the container collapses its scroll range to nothing, so
+ * scrollTop clamps to 0 -- which sent the rail back to the top on every
+ * checkbox tick. Restoring it after the content is back is enough;
+ * toggles then adjust from there in accordionGroup's toggle().
+ */
 function renderFilters() {
+  const scroller = document.getElementById("filters-body");
+  const scrollTop = scroller.scrollTop;
+  renderFiltersInner();
+  scroller.scrollTop = scrollTop;
+}
+
+function renderFiltersInner() {
   // The rail's scroll container, not the rail itself: the "Filters"
   // heading and "Clear all filters" live in a fixed header above it.
   const root = document.getElementById("filters-body");
