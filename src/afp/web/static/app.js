@@ -1006,11 +1006,7 @@ function renderCustomBar() {
   openBtn.className = "btn btn-small";
   openBtn.textContent = "Open";
   openBtn.addEventListener("click", openCustomEntriesModal);
-  const clearBtn = document.createElement("button");
-  clearBtn.className = "btn btn-small";
-  clearBtn.textContent = "Clear";
-  clearBtn.addEventListener("click", clearCustomEntries);
-  actions.append(openBtn, clearBtn);
+  actions.appendChild(openBtn);
   bar.appendChild(actions);
 }
 
