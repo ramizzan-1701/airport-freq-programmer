@@ -900,7 +900,7 @@ function renderRadiusFilters(container) {
       item.className = "radius-item";
       item.textContent = `${rf.mode === "include" ? "Within" : "Exclude"} ${rf.radius_nm}nm of ${rf.center}`;
       const rm = document.createElement("button");
-      rm.textContent = "×";
+      rm.textContent = "✕";
       rm.title = "Remove";
       rm.addEventListener("click", () => {
         selected.radiusFilters.splice(idx, 1);

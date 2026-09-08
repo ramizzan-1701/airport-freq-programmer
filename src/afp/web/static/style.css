@@ -562,9 +562,10 @@ main#app > .workspace,
 }
 #generate-btn {
   font-size: 14px;
-  padding: 14px 18px;
+  padding: 14px 12px;
   line-height: 1;
-  align-self: flex-start;
+  align-self: stretch;
+  white-space: nowrap;
 }
 #generate-hint {
   margin-top: 10px;
