@@ -1564,7 +1564,7 @@ function renderResults(result) {
 
     const groupTd = document.createElement("td");
     const pill = document.createElement("span");
-    pill.className = e.is_custom ? "group-pill custom" : "group-pill";
+    pill.className = "group-pill";
     pill.textContent = e.group;
     groupTd.appendChild(pill);
     tr.appendChild(groupTd);

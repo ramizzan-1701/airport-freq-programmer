@@ -700,11 +700,12 @@ main#app > .workspace,
 .group-pill.custom { border-color: var(--custom); color: var(--custom); }
 
 /* Rows preserved from the user's radio, listed after the FAA results in
-   the same order the XML writes them. Marked, not highlighted: they are
-   ordinary rows of the same table, so only the "From your radio" note
-   carries the accent -- a full-row tint would read as a warning. */
+   the same order the XML writes them. Annotated, not accented: green is
+   the section-title colour, and spending it on a row would make these
+   look more significant than the FAA rows they sit among. The italic
+   grey reads as a note about the row rather than data in it. */
 .results-table tr.row-custom .cell-custom-note {
-  color: var(--custom);
+  color: var(--ink3);
   font-style: italic;
 }
 
