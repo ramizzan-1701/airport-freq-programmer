@@ -987,7 +987,7 @@ function renderCustomBar() {
     actions.className = "custom-bar-actions";
     const importBtn = document.createElement("button");
     importBtn.className = "btn btn-small";
-    importBtn.textContent = "Import Existing XML";
+    importBtn.textContent = "Import XML";
     importBtn.addEventListener("click", () => document.getElementById("custom-import-input").click());
     actions.appendChild(importBtn);
     bar.appendChild(actions);
