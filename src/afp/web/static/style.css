@@ -211,10 +211,10 @@ main#app > .workspace,
   margin: 0;
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 12px;
+  font-size: 14px;
   letter-spacing: .18em;
   text-transform: uppercase;
-  color: var(--acc);
+  color: var(--ink);
 }
 
 .clear-all {
@@ -245,7 +245,7 @@ main#app > .workspace,
   font-size: 11px;
   letter-spacing: .2em;
   text-transform: uppercase;
-  color: var(--ink3);
+  color: var(--acc);
 }
 
 /* ---------- accordion group ---------- */
