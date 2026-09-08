@@ -316,6 +316,15 @@ async function initWorkspace() {
 function groupActions(onSelectAll, onClear) {
   const wrap = document.createElement("span");
   wrap.className = "filter-group-actions";
+  // These sit inside the group header, and the header's own click and
+  // Enter/Space handlers toggle the accordion. Left to bubble, acting on
+  // the options collapses the list you were about to look at -- so the
+  // whole actions cluster stops both, including clicks on the gap
+  // between the two buttons.
+  wrap.addEventListener("click", (event) => event.stopPropagation());
+  wrap.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+  });
   const selectAllBtn = document.createElement("button");
   selectAllBtn.type = "button";
   selectAllBtn.className = "text-action";
