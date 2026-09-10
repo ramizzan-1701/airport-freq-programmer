@@ -1,4 +1,4 @@
-"""Export profile for the Yaesu FTA-850L, via its YCE-64 programming
+"""Export profile for the Yaesu FTA-850L, via its YCE-46 programming
 software. Values confirmed by hand against the actual software:
 14-char tag cap, 400-entry cap.
 """
@@ -6,7 +6,7 @@ software. Values confirmed by hand against the actual software:
 from .profile import ExportProfile
 
 FTA_850L = ExportProfile(
-    name="FTA-850 / YCE-64",
+    name="FTA-850 / YCE-46",
     max_tag_length=14,
     max_entries=400,
 )

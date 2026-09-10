@@ -1,6 +1,6 @@
-"""Parses a YCE-64 memory-book XML file back into Entry objects -- the
+"""Parses a YCE-46 memory-book XML file back into Entry objects -- the
 inverse of xml_writer.py. Needed for the custom-entry preserve/merge flow
-(spec §5): a user exports their full current radio memory from YCE-64 and
+(spec §5): a user exports their full current radio memory from YCE-46 and
 re-imports it here so hand-added entries survive a regeneration cycle.
 
 Format-only concern, same as xml_writer.py -- the recognized/custom split
@@ -40,7 +40,7 @@ def _text(element: ET.Element | None, tag: str, parent_desc: str) -> str:
 
 
 def parse_memory_book_xml(xml_bytes: bytes) -> list[Entry]:
-    """Parse a YCE-64-exported <FILE><MEMORY_BOOK> XML into Entry objects.
+    """Parse a YCE-46-exported <FILE><MEMORY_BOOK> XML into Entry objects.
 
     Raises XmlParseError on malformed XML or a MEMORY_BOOK_GROUP missing
     any required field -- never lets a bare parse/attribute error escape.

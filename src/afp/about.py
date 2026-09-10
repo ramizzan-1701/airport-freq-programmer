@@ -13,7 +13,7 @@ from __future__ import annotations
 
 INTRO_PARAGRAPHS: tuple[str, ...] = (
     "Turns the FAA's 28-Day NASR aeronautical data into a radio-memory XML file for the "
-    "Yaesu FTA-850 (850L and 850AA), loadable through Yaesu's YCE-64 programming software.",
+    "Yaesu FTA-850 (850L and 850AA), loadable through Yaesu's YCE-46 programming software.",
     "Downloading the nationwide NASR dataset yields far more frequencies than the radio's "
     "400-memory limit, so the app is built around filtering it down: pick states, cities, a "
     "geographic radius, frequency categories, facility types — and watch a live counter tell "
@@ -46,7 +46,7 @@ FEATURES: tuple[tuple[str, str], ...] = (
         "aren't in the app's six generated groups are held aside and merged back into every "
         "future export, untouched.",
     ),
-    ("Generates", "the YCE-64-compatible XML."),
+    ("Generates", "the YCE-46-compatible XML."),
 )
 
 AUTHOR = "Ryan Ramirez"

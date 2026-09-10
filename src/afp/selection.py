@@ -87,7 +87,7 @@ _RAW_TEXT_SUFFIX_CATEGORIES = frozenset({"APCH_DEP", "MIL_GOV_OPS", "PROCEDURE_F
 # row (RCAG relay, ARTCC center, ...), FRQ.csv's SERVICED_FACILITY is
 # sometimes a full place name instead of a code (e.g. "MEDICINE BOW",
 # confirmed present for 590 of 1,605 standalone facility IDs nationwide,
-# 2026-08-06 cycle) and blows past the FTA-850L / YCE-64's 14-char tag
+# 2026-08-06 cycle) and blows past the FTA-850L / YCE-46's 14-char tag
 # cap. 6 chars leaves room for the longest fixed suffix (-TRACON/-UNICOM,
 # 7 chars incl. dash) plus one spare char for _unique_tag's numeric
 # disambiguator: 6 + 7 + 1 == 14.
@@ -181,7 +181,7 @@ def default_group_for(airport_id: str) -> str:
     """Fixed group-name scheme, keyed on the airport ID's first character:
     0-9, A-E, F-J, K-O, P-T, U-Z. This is the permanent scheme (not a
     placeholder for future dynamic/balanced grouping) -- the user has to
-    manually rename the 9 fixed group slots in YCE-64 to match whatever
+    manually rename the 9 fixed group slots in YCE-46 to match whatever
     names the app emits (see spec §5), so a stable, predictable set of
     group names matters more than evenly balancing entries across them.
     """

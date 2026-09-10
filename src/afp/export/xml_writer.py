@@ -1,8 +1,8 @@
-"""XML generation for the YCE-64 memory-book format.
+"""XML generation for the YCE-46 memory-book format.
 
 Encodes the lessons learned building this by hand as validation checks
 (not just documentation):
-  - UTF-8 BOM required before the XML declaration, or YCE-64 rejects the
+  - UTF-8 BOM required before the XML declaration, or YCE-46 rejects the
     file.
   - FREQUENCY must render with exactly 3 decimal places.
   - TAG_NAME must not exceed the profile's max length, and must be unique
@@ -66,7 +66,7 @@ def _format_coordinate(value: float, positive: str, negative: str) -> tuple[str,
 
 
 def build_xml(entries: list[Entry], profile: ExportProfile) -> bytes:
-    """Build the full YCE-64-importable XML file, BOM included.
+    """Build the full YCE-46-importable XML file, BOM included.
 
     Raises ExportValidationError (never truncates/renames) if entries
     violate the profile's tag-length, per-group uniqueness, or entry-count

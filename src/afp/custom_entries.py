@@ -1,5 +1,5 @@
 """Business rules for the custom-entry preserve/merge flow (spec §5):
-splitting an imported YCE-64 memory-book export into entries the app
+splitting an imported YCE-46 memory-book export into entries the app
 itself would regenerate ("recognized") vs. entries a user hand-added
 ("custom"), and enforcing the radio's fixed slot capacity for the latter.
 """

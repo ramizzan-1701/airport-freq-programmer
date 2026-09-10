@@ -73,7 +73,7 @@ class AppState:
         return self.loaded
 
     def import_custom_entries(self, xml_bytes: bytes) -> list[Entry]:
-        """Parses a full YCE-64 export, keeps only the entries that don't
+        """Parses a full YCE-46 export, keeps only the entries that don't
         match the app's 6 fixed group names, and replaces (not merges
         with) whatever custom set was previously held -- each import is a
         full snapshot of "everything currently on the radio", so a stale

@@ -1106,7 +1106,7 @@ function renderRadiusFilters(container) {
 
 // ---------- custom entries & group setup ----------
 //
-// Custom entries (spec §5): a user's hand-added frequencies from YCE-64,
+// Custom entries (spec §5): a user's hand-added frequencies from YCE-46,
 // preserved across regeneration by importing their full current radio
 // export and keeping only what doesn't match the app's 6 fixed group
 // names. Held server-side (persisted across restarts); this module just
@@ -1173,7 +1173,7 @@ async function importCustomEntriesFile(file) {
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    alert("Import failed: " + (body.detail || "the file couldn't be read as a YCE-64 export."));
+    alert("Import failed: " + (body.detail || "the file couldn't be read as a YCE-46 export."));
     return;
   }
   const body = await res.json();
@@ -1338,7 +1338,7 @@ function showBlockedImportModal({ groups, found, available }) {
   scroll.appendChild(p2);
 
   const p3 = document.createElement("p");
-  p3.textContent = `In YCE-64, consolidate these ${found} groups down to ${available} or fewer -- merge entries into fewer groups, or delete ones you don't need -- then re-export and re-import.`;
+  p3.textContent = `In YCE-46, consolidate these ${found} groups down to ${available} or fewer -- merge entries into fewer groups, or delete ones you don't need -- then re-export and re-import.`;
   scroll.appendChild(p3);
   box.appendChild(scroll);
 
@@ -1383,7 +1383,7 @@ function appendGroupSetupInstructions(box) {
   kicker.className = "setup-kicker";
   kicker.textContent = "Why this matters";
   const whyText = document.createElement("p");
-  whyText.textContent = "This app will sort frequencies into 6 alphabetized Groups for quick recall on your radio. The Yaesu YCE-64 editor can't create or edit Group names on import - they must already exist there, or that group's frequencies will be dropped.";
+  whyText.textContent = "This app will sort frequencies into 6 alphabetized Groups for quick recall on your radio. The Yaesu YCE-46 editor can't create or edit Group names on import - they must already exist there, or that group's frequencies will be dropped.";
   const whyLead = document.createElement("p");
   whyLead.className = "setup-lead";
   whyLead.textContent = "There are 9 Group slots available. Rename 6 of them:";
@@ -1397,7 +1397,7 @@ function appendGroupSetupInstructions(box) {
   step1.appendChild(stepNumber("1"));
   const step1Text = document.createElement("div");
   step1Text.append(
-    document.createTextNode("Open the YCE-64 editor. Go to: "),
+    document.createTextNode("Open the YCE-46 editor. Go to: "),
     Object.assign(document.createElement("b"), { textContent: "Setup -> Memory Group Name" }),
     document.createTextNode("."),
   );
@@ -1435,9 +1435,9 @@ function appendGroupSetupInstructions(box) {
     label.className = "slot-name";
     label.textContent = name;
     // Per-name rather than one bulk copy: these get pasted into six
-    // separate YCE-64 fields, so a single comma-joined string can't
+    // separate YCE-46 fields, so a single comma-joined string can't
     // actually be used. Typing them is easy enough, but a mistyped name
-    // fails silently -- YCE-64 just drops that entry's grouping.
+    // fails silently -- YCE-46 just drops that entry's grouping.
     li.append(slot, arrow, label, copyNameButton(name));
     list.appendChild(li);
   });
