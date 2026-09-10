@@ -46,6 +46,12 @@ WINDOW_MIN_SIZE = (1180, 760)
 # this never comes up; it's specific to running inside a native webview.
 webview.settings["ALLOW_DOWNLOADS"] = True
 
+# Already the default, but pinned: the About screen links out to Yaesu,
+# and if this ever flipped, that link would load the vendor's site inside
+# the app window -- which has no address bar and no back button, so there
+# would be no way back to the app short of restarting it.
+webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
+
 
 class ServerStartupError(RuntimeError):
     """uvicorn never reached a bound-and-listening state."""

@@ -1524,7 +1524,7 @@ async function showAboutModal({ firstRun = false } = {}) {
 
   for (const text of aboutCopy.intro) {
     const p = document.createElement("p");
-    p.textContent = text;
+    appendLinkedText(p, text, aboutCopy.intro_links || []);
     body.appendChild(p);
   }
 
@@ -1578,6 +1578,36 @@ async function showAboutModal({ firstRun = false } = {}) {
 
   modal.classList.remove("hidden");
   closeBtn.focus();
+}
+
+/** Appends `text` to `el`, turning any of `links`' phrases into anchors.
+ *
+ * The paragraphs arrive as plain text -- the copy has to stay comparable
+ * to README.md, so the links are described separately rather than marked
+ * up inside it. Takes the earliest match on each pass so several links in
+ * one paragraph still come out in order.
+ */
+function appendLinkedText(el, text, links) {
+  let rest = text;
+  while (rest) {
+    let best = null;
+    for (const link of links) {
+      const at = rest.indexOf(link.phrase);
+      if (at !== -1 && (best === null || at < best.at)) best = { at, link };
+    }
+    if (!best) break;
+
+    if (best.at > 0) el.appendChild(document.createTextNode(rest.slice(0, best.at)));
+    const a = document.createElement("a");
+    a.href = best.link.url;
+    a.target = "_blank";
+    // Without this the opened page can reach back through window.opener.
+    a.rel = "noopener noreferrer";
+    a.textContent = best.link.phrase;
+    el.appendChild(a);
+    rest = rest.slice(best.at + best.link.phrase.length);
+  }
+  if (rest) el.appendChild(document.createTextNode(rest));
 }
 
 async function acknowledgeAbout() {

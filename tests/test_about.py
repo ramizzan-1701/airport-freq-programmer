@@ -105,6 +105,41 @@ def test_the_creator_and_contact_address_are_shown(empty_client):
     assert "@" in body["contact_email"]
 
 
+# ---------- intro links ----------
+
+
+def test_every_intro_link_phrase_actually_appears_in_the_intro():
+    """A link is described by the phrase it wraps, so a typo in that
+    phrase doesn't error -- it just silently renders no link at all.
+    """
+    joined = " ".join(about.INTRO_PARAGRAPHS)
+    for phrase, _url in about.INTRO_LINKS:
+        assert phrase in joined, f"no intro paragraph contains {phrase!r}, so it would not link"
+
+
+def test_intro_links_are_absolute_urls():
+    for _phrase, url in about.INTRO_LINKS:
+        assert url.startswith("https://"), url
+
+
+def test_the_yaesu_software_link_is_present(empty_client):
+    body = empty_client.get("/api/about").json()
+    links = {link["phrase"]: link["url"] for link in body["intro_links"]}
+    assert "YCE-46 programming software" in links
+    assert "yaesu.com" in links["YCE-46 programming software"]
+
+
+def test_the_desktop_app_sends_external_links_to_the_system_browser():
+    """The About link is the app's only outbound link. Opened inside the
+    webview it would be a dead end -- no address bar, no back button.
+    """
+    import webview
+
+    import afp.desktop  # noqa: F401  (importing applies the setting)
+
+    assert webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] is True
+
+
 # ---------- the text is still the README's ----------
 #
 # The About screen exists to say what the README says. These fail if

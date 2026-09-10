@@ -99,8 +99,15 @@ class AboutFeatureOut(BaseModel):
     text: str
 
 
+class AboutLinkOut(BaseModel):
+    """A phrase in the intro text that should render as a link."""
+    phrase: str
+    url: str
+
+
 class AboutOut(BaseModel):
     intro: list[str]
+    intro_links: list[AboutLinkOut]
     features: list[AboutFeatureOut]
     author: str
     contact_email: str

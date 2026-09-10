@@ -20,6 +20,18 @@ INTRO_PARAGRAPHS: tuple[str, ...] = (
     "you whether the current selection fits on the radio before you generate anything.",
 )
 
+# Phrases inside INTRO_PARAGRAPHS that render as links, and where they
+# point. Deliberately not markup inside the paragraph: the text above has
+# to stay comparable to README.md word for word, and a phrase that stops
+# appearing there is a typo worth failing a test over rather than a link
+# that silently goes missing.
+INTRO_LINKS: tuple[tuple[str, str], ...] = (
+    (
+        "YCE-46 programming software",
+        "https://yaesu.com/product-detail.aspx?Model=FTA-850L&CatName=Portables",
+    ),
+)
+
 # (bold lead, the rest of the bullet) -- the split the README's own
 # markdown makes, preserved so the screen can render the lead in bold
 # rather than shipping markup through the API.

@@ -858,6 +858,7 @@ main#app > .workspace,
   line-height: 1.7;
   color: var(--ink3);
 }
+.about-body a,
 .about-meta a { color: var(--acc); }
 
 /* ---------- group setup: three zones ---------- */

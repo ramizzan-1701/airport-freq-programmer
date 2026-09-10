@@ -25,6 +25,7 @@ from ..query import query as query_mod
 from ..selection import FIXED_GROUP_NAMES, orphan_tag_ids, select_entries
 from .models import (
     AboutFeatureOut,
+    AboutLinkOut,
     AboutOut,
     CategoryCountOut,
     CustomEntriesOut,
@@ -99,6 +100,10 @@ def create_app(cache_dir: Path) -> FastAPI:
     def about() -> AboutOut:
         return AboutOut(
             intro=list(about_copy.INTRO_PARAGRAPHS),
+            intro_links=[
+                AboutLinkOut(phrase=phrase, url=url)
+                for phrase, url in about_copy.INTRO_LINKS
+            ],
             features=[
                 AboutFeatureOut(lead=lead, text=text)
                 for lead, text in about_copy.FEATURES
