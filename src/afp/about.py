@@ -14,12 +14,13 @@ app while this speaks to someone already looking at it.
 from __future__ import annotations
 
 INTRO_PARAGRAPHS: tuple[str, ...] = (
-    "Turns the FAA's 28-Day NASR aeronautical data into a radio-memory XML file for the "
-    "Yaesu FTA-850 (850L and 850AA), loadable through Yaesu's YCE-46 programming software.",
-    "Downloading the nationwide NASR dataset yields far more frequencies than the radio's "
-    "400-memory limit, so the app is built around filtering it down: pick states, cities, a "
-    "geographic radius, frequency categories, facility types — and watch a live counter tell "
-    "you whether the current selection fits on the radio before you generate anything.",
+    "This app fetches and displays the FAA's 28-Day NASR frequency data into a "
+    "radio-memory XML file for the Yaesu FTA-850 (850L and 850AA), loadable through "
+    "Yaesu's YCE-46 programming software.",
+    "Since the nationwide NASR dataset yields far more frequencies than the radio's "
+    "400-memory limit, the app is built around filtering it down. Pick states, cities, "
+    "a geographic radius, frequency categories, facility types — and watch a live "
+    "counter tell you when it will fit on the radio.",
 )
 
 # Phrases inside INTRO_PARAGRAPHS that render as links, and where they
@@ -45,8 +46,7 @@ FEATURES: tuple[tuple[str, str], ...] = (
     (
         "Classifies",
         "every frequency into a usable category (CTAF, Tower, Ground, Clearance, "
-        'Weather, Approach/Departure, VOR, ILS, and a long tail of raw values behind an '
-        '"Advanced" toggle).',
+        "Weather, Approach/Departure, VOR, etc).",
     ),
     (
         "Filters",
@@ -54,16 +54,13 @@ FEATURES: tuple[tuple[str, str], ...] = (
         "with a live entry counter against the radio's 400-memory cap.",
     ),
     (
-        "Preserves your own entries.",
-        "Import your current radio export and any memories that "
-        "aren't in the app's six generated groups are held aside and merged back into every "
-        "future export, untouched.",
+        "Preserves your own radio entries.",
+        "Import your current radio export and they will be "
+        "merged back into the app's export, untouched.",
     ),
     ("Generates", "the YCE-46-compatible XML."),
 )
 
-# ---------- page 2: the end-to-end workflow ----------
-#
 # The one place that says how the app and YCE-46 fit together across a
 # whole session. **double asterisks** mark the runs that render bold;
 # the arrows are the app's usual glyph rather than "->".
