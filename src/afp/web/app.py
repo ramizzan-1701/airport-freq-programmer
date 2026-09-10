@@ -108,6 +108,8 @@ def create_app(cache_dir: Path) -> FastAPI:
                 AboutFeatureOut(lead=lead, text=text)
                 for lead, text in about_copy.FEATURES
             ],
+            workflow_intro=about_copy.WORKFLOW_INTRO,
+            workflow_steps=list(about_copy.WORKFLOW_STEPS),
             author=about_copy.AUTHOR,
             contact_email=about_copy.CONTACT_EMAIL,
             app_version=__version__,

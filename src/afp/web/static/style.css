@@ -861,6 +861,47 @@ main#app > .workspace,
 .about-body a,
 .about-meta a { color: var(--acc); }
 
+/* Numbered workflow on page 2. */
+.about-workflow {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink2);
+}
+.about-workflow li { margin-bottom: 11px; padding-left: 2px; }
+.about-workflow li::marker {
+  color: var(--acc);
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+.about-workflow b { color: var(--ink); font-weight: 600; }
+
+/* Page turn, pushed to the right of the footer's primary button. */
+.about-nav {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.about-page-count {
+  font-size: 11.5px;
+  color: var(--ink3);
+  font-variant-numeric: tabular-nums;
+}
+.about-arrow {
+  background: var(--input);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink2);
+  font-size: 14px;
+  line-height: 1;
+  padding: 6px 11px;
+  cursor: pointer;
+}
+.about-arrow:hover:not(:disabled) { color: var(--acc); border-color: var(--acc); }
+.about-arrow:disabled { opacity: .35; cursor: default; }
+
 /* ---------- group setup: three zones ---------- */
 .setup-why {
   padding: 13px 24px;

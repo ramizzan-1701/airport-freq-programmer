@@ -1498,10 +1498,15 @@ function copyNameButton(name) {
 // to parse this file.
 
 let aboutCopy = null;
+const ABOUT_PAGES = 2;
 
 /** The About screen. Shown once ahead of the load screen on a fresh
  * install, and on demand from the topbar thereafter -- one component for
  * both, so the two can't drift.
+ *
+ * Two pages: what the app is, then how it fits around a YCE-46 session.
+ * The header and footer are built once and only the body is re-rendered
+ * on a page turn, so the primary button keeps its focus and position.
  */
 async function showAboutModal({ firstRun = false } = {}) {
   const modal = document.getElementById("about-modal");
@@ -1515,13 +1520,76 @@ async function showAboutModal({ firstRun = false } = {}) {
     }
   }
 
+  let page = 1;
+
   box.innerHTML = "";
   box.appendChild(modalHeader("FTA-850 Frequency Programmer"));
 
   // modal-scroll is what sits between the pinned header and footer.
   const body = document.createElement("div");
   body.className = "modal-scroll about-body";
+  box.appendChild(body);
 
+  const footer = document.createElement("div");
+  footer.className = "modal-footer";
+  const actionsRow = document.createElement("div");
+  actionsRow.className = "modal-actions";
+
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "btn btn-primary";
+  // On a first run this is the step before the load screen, so it reads
+  // as moving forward rather than dismissing something.
+  closeBtn.textContent = firstRun ? "Get started" : "Close";
+  closeBtn.addEventListener("click", () => {
+    modal.classList.add("hidden");
+    if (!aboutAcknowledged) acknowledgeAbout();
+  });
+
+  const nav = document.createElement("div");
+  nav.className = "about-nav";
+  const prev = document.createElement("button");
+  prev.className = "about-arrow";
+  prev.type = "button";
+  prev.textContent = "←";
+  prev.setAttribute("aria-label", "Previous page");
+  const indicator = document.createElement("span");
+  indicator.className = "about-page-count";
+  const next = document.createElement("button");
+  next.className = "about-arrow";
+  next.type = "button";
+  next.textContent = "→";
+  next.setAttribute("aria-label", "Next page");
+  nav.append(prev, indicator, next);
+
+  actionsRow.append(closeBtn, nav);
+  footer.appendChild(actionsRow);
+  box.appendChild(footer);
+
+  function turnTo(n) {
+    page = Math.min(ABOUT_PAGES, Math.max(1, n));
+    renderAboutPage(body, page);
+    // Back to the top: a page turn is new content, and leaving it
+    // scrolled to wherever the last page ended hides the beginning.
+    body.scrollTop = 0;
+    indicator.textContent = `${page} / ${ABOUT_PAGES}`;
+    prev.disabled = page === 1;
+    next.disabled = page === ABOUT_PAGES;
+  }
+  prev.addEventListener("click", () => turnTo(page - 1));
+  next.addEventListener("click", () => turnTo(page + 1));
+
+  turnTo(1);
+  modal.classList.remove("hidden");
+  closeBtn.focus();
+}
+
+function renderAboutPage(body, page) {
+  body.innerHTML = "";
+  if (page === 1) appendAboutOverview(body);
+  else appendAboutWorkflow(body);
+}
+
+function appendAboutOverview(body) {
   for (const text of aboutCopy.intro) {
     const p = document.createElement("p");
     appendLinkedText(p, text, aboutCopy.intro_links || []);
@@ -1557,27 +1625,40 @@ async function showAboutModal({ firstRun = false } = {}) {
   contact.appendChild(mail);
   meta.append(build, author, contact);
   body.appendChild(meta);
-  box.appendChild(body);
+}
 
-  const footer = document.createElement("div");
-  footer.className = "modal-footer";
-  const actionsRow = document.createElement("div");
-  actionsRow.className = "modal-actions";
-  const closeBtn = document.createElement("button");
-  closeBtn.className = "btn btn-primary";
-  // On a first run this is the step before the load screen, so it reads
-  // as moving forward rather than dismissing something.
-  closeBtn.textContent = firstRun ? "Get started" : "Close";
-  closeBtn.addEventListener("click", () => {
-    modal.classList.add("hidden");
-    if (!aboutAcknowledged) acknowledgeAbout();
+function appendAboutWorkflow(body) {
+  const lead = document.createElement("p");
+  lead.textContent = aboutCopy.workflow_intro;
+  body.appendChild(lead);
+
+  const ol = document.createElement("ol");
+  ol.className = "about-workflow";
+  for (const step of aboutCopy.workflow_steps) {
+    const li = document.createElement("li");
+    appendBoldMarkedText(li, step);
+    ol.appendChild(li);
+  }
+  body.appendChild(ol);
+}
+
+/** Appends `text` to `el`, rendering **double-asterisk** runs in bold.
+ * The markers travel in the copy so the emphasis lives with the words
+ * rather than being reconstructed from positions here.
+ */
+function appendBoldMarkedText(el, text) {
+  const parts = text.split("**");
+  parts.forEach((part, i) => {
+    if (!part) return;
+    // Odd indices are what sat between a pair of markers.
+    if (i % 2 === 1) {
+      const b = document.createElement("b");
+      b.textContent = part;
+      el.appendChild(b);
+    } else {
+      el.appendChild(document.createTextNode(part));
+    }
   });
-  actionsRow.append(closeBtn);
-  footer.appendChild(actionsRow);
-  box.appendChild(footer);
-
-  modal.classList.remove("hidden");
-  closeBtn.focus();
 }
 
 /** Appends `text` to `el`, turning any of `links`' phrases into anchors.

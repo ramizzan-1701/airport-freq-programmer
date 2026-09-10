@@ -61,5 +61,33 @@ FEATURES: tuple[tuple[str, str], ...] = (
     ("Generates", "the YCE-46-compatible XML."),
 )
 
+# ---------- page 2: the end-to-end workflow ----------
+#
+# Not from the README -- this is the one place that says how the app and
+# YCE-46 fit together across a whole session. **double asterisks** mark
+# the runs that render bold, the same convention the README's bullets
+# use; the arrows are the app's usual glyph rather than "->".
+
+WORKFLOW_INTRO = (
+    "Proper workflow to use this app in conjunction with the Yaesu YCE-46 "
+    "programming software:"
+)
+
+WORKFLOW_STEPS: tuple[str, ...] = (
+    "Open YCE-46. Go to: **Setup → Memory Group Name.**",
+    "Rename 6 of the 9 Groups. (see GROUPS SETUP in this app)",
+    "In YCE-46 editor: Go to **File → XML File → Save** to save your existing "
+    "frequency list from your radio.",
+    "Import this XML file into this app. It will import all your frequencies "
+    "saved to custom groups.",
+    "Filter for the frequencies you want to keep.",
+    "“Generate XML”. It will include the NASR frequencies in their alphabetized "
+    "groups AND the custom frequency groups you imported.",
+    "Go back to YCE-46 and select **File → XML File → Open.** Select the "
+    "generated XML file from this app.",
+    "Select Transfer → Program to Radio to upload the new frequencies to your "
+    "radio!",
+)
+
 AUTHOR = "Ryan Ramirez"
 CONTACT_EMAIL = "ramizzan@gmail.com"

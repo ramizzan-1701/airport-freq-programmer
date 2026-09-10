@@ -140,6 +140,33 @@ def test_the_desktop_app_sends_external_links_to_the_system_browser():
     assert webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] is True
 
 
+# ---------- page 2: the workflow ----------
+
+
+def test_the_workflow_is_served_in_order(empty_client):
+    body = empty_client.get("/api/about").json()
+    assert body["workflow_intro"].startswith("Proper workflow")
+    assert body["workflow_steps"] == list(about.WORKFLOW_STEPS)
+    assert len(body["workflow_steps"]) == 8
+
+
+def test_every_workflow_steps_bold_markers_are_balanced():
+    """The frontend renders these by splitting on "**" and bolding the
+    odd-numbered pieces. An unpaired marker doesn't error -- it silently
+    bolds the rest of the step.
+    """
+    for i, step in enumerate(about.WORKFLOW_STEPS, start=1):
+        assert step.count("**") % 2 == 0, f"unbalanced bold markers in step {i}: {step!r}"
+
+
+def test_the_workflow_uses_the_arrow_glyph_not_an_ascii_arrow():
+    """The app writes menu paths with the arrow character everywhere
+    else; a stray "->" would read as a different convention.
+    """
+    for step in about.WORKFLOW_STEPS:
+        assert "->" not in step, step
+
+
 # ---------- the text is still the README's ----------
 #
 # The About screen exists to say what the README says. These fail if

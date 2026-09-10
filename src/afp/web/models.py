@@ -109,6 +109,9 @@ class AboutOut(BaseModel):
     intro: list[str]
     intro_links: list[AboutLinkOut]
     features: list[AboutFeatureOut]
+    # Page 2. Steps carry **bold** markers, rendered by the frontend.
+    workflow_intro: str
+    workflow_steps: list[str]
     author: str
     contact_email: str
     app_version: str
