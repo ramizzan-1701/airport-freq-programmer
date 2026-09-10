@@ -61,10 +61,27 @@ body {
   color: var(--ink);
   font-family: var(--font-mono);
   font-size: 13px;
-  overflow: hidden; /* the two scroll containers own all scrolling */
+  /* auto, not hidden: at or above the floor below there is nothing to
+     scroll and no bar appears, but a window dragged under it must be
+     able to reach the content rather than have it clipped away. The two
+     inner scroll containers still own all scrolling in normal use. */
+  overflow: auto;
 }
 
-#app { display: flex; flex-direction: column; height: 100%; }
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  /* The floor. Squeezed below this the layout does not degrade
+     gracefully -- the breakdown reflows its chips into a single column
+     and the band grows tall enough to push the results table off screen
+     -- so scroll instead of reflowing into something unusable. Set just
+     under the 1180x760 the desktop window clamps to, so the window
+     chrome eating a few px off its own minimum can't put a scrollbar on
+     the packaged app. */
+  min-width: 1160px;
+  min-height: 660px;
+}
 
 .hidden { display: none !important; }
 

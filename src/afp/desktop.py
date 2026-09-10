@@ -23,6 +23,23 @@ from .web import create_app
 WINDOW_TITLE = "Airport Frequency Programmer"
 _STARTUP_TIMEOUT_S = 30.0
 
+# The size the UI was composed at. The layout tolerates larger -- the
+# filter rail is fixed at 336px and the results panel absorbs the rest --
+# but not smaller: the per-category breakdown shrinks with the window and
+# reflows its chips into a single column, and the band grows tall enough
+# to push the results table off screen entirely. Measured against the
+# real 2026-09-03 cycle, 20 categories showing:
+#
+#   1180px  252px breakdown, 11 chip rows, 397px band, table visible
+#   1140px  212px breakdown, 16 chip rows, 552px band, table visible
+#   1100px  190px breakdown, 20 chip rows, 690px band, TABLE OFF SCREEN
+#
+# So the floor is the design size, not a token value below it: pywebview
+# defaults min_size to (200, 100), and the 1000x700 this used to pass was
+# already inside the broken range.
+WINDOW_SIZE = (1180, 760)
+WINDOW_MIN_SIZE = (1180, 760)
+
 # pywebview defaults this to False, which silently swallows the download
 # triggered by "Generate XML" -- the button appears to do nothing, and
 # producing that file is the entire point of the app. In a browser tab
@@ -78,12 +95,9 @@ def main() -> int:
     webview.create_window(
         WINDOW_TITLE,
         f"http://127.0.0.1:{port}",
-        # The size the UI was designed at. The layout tolerates larger
-        # (the rail is fixed at 336px and the results panel absorbs the
-        # rest), but this is the proportion it was composed for.
-        width=1180,
-        height=760,
-        min_size=(1000, 700),
+        width=WINDOW_SIZE[0],
+        height=WINDOW_SIZE[1],
+        min_size=WINDOW_MIN_SIZE,
     )
     webview.start()  # blocks until the user closes the window
 

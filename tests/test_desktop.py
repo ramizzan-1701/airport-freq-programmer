@@ -11,7 +11,12 @@ import urllib.request
 import pytest
 import uvicorn
 
-from afp.desktop import ServerStartupError, _wait_for_port
+from afp.desktop import (
+    WINDOW_MIN_SIZE,
+    WINDOW_SIZE,
+    ServerStartupError,
+    _wait_for_port,
+)
 from afp.paths import APP_NAME, default_cache_dir
 from afp.web import create_app
 
@@ -90,3 +95,57 @@ def test_default_cache_dir_is_absolute_and_outside_the_checkout():
     cache_dir = default_cache_dir()
     assert cache_dir.is_absolute()
     assert APP_NAME in str(cache_dir)
+
+
+# ---------- window geometry ----------
+#
+# webview.start() can't run under pytest, so these assert the numbers
+# handed to create_window rather than the window itself.
+
+
+def test_the_window_cannot_be_dragged_below_the_size_the_ui_was_composed_at():
+    """Below 1180x760 the breakdown reflows its chips into one column and
+    the band grows tall enough to push the results table off screen, so
+    the floor is the design size rather than some smaller round number.
+    """
+    assert WINDOW_MIN_SIZE == (1180, 760)
+    assert WINDOW_SIZE >= WINDOW_MIN_SIZE
+
+
+def test_the_window_minimum_is_above_pywebviews_own_default():
+    """pywebview defaults min_size to (200, 100). Leaving that in place
+    is what "abnormally small" looks like -- the guard only means
+    anything if it is well clear of the default.
+    """
+    import inspect
+
+    import webview
+
+    default = inspect.signature(webview.create_window).parameters["min_size"].default
+    assert default == (200, 100), "pywebview's default moved; re-check this guard"
+    assert WINDOW_MIN_SIZE[0] > default[0]
+    assert WINDOW_MIN_SIZE[1] > default[1]
+
+
+def test_the_css_floor_sits_under_the_window_minimum():
+    """The stylesheet stops the layout collapsing on any surface, the
+    browser included. It has to sit *below* the window minimum: window
+    chrome eats a few px off the window's own size, and a floor at or
+    above it would put a scrollbar on the packaged app at its smallest
+    allowed size.
+    """
+    import re
+
+    from afp.web.app import STATIC_DIR
+
+    css = (STATIC_DIR / "style.css").read_text(encoding="utf-8")
+    app_rule = re.search(r"#app\s*\{(.*?)\}", css, re.DOTALL)
+    assert app_rule, "#app rule not found"
+    min_w = int(re.search(r"min-width:\s*(\d+)px", app_rule.group(1)).group(1))
+    min_h = int(re.search(r"min-height:\s*(\d+)px", app_rule.group(1)).group(1))
+
+    assert min_w < WINDOW_MIN_SIZE[0]
+    assert min_h < WINDOW_MIN_SIZE[1]
+    # Still close enough to the design width to hold the two-column
+    # breakdown -- a floor of, say, 900 would "work" and look broken.
+    assert min_w >= 1140
