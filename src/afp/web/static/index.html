@@ -9,10 +9,11 @@
 <body>
   <main id="app">
     <header class="topbar">
-      <h1>Airport Frequency Programmer</h1>
+      <h1>FTA-850 Frequency Programmer</h1>
       <div class="topbar-right">
         <div id="cycle-status" class="cycle-status"></div>
-        <button id="group-setup-link" class="btn btn-small">Group setup instructions</button>
+        <button id="group-setup-link" class="btn btn-small">Groups setup help</button>
+        <button id="about-link" class="btn btn-small">About</button>
       </div>
     </header>
 
@@ -74,6 +75,10 @@
   </main>
 
   <input type="file" id="custom-import-input" accept=".xml" class="hidden">
+
+  <div id="about-modal" class="modal-backdrop hidden">
+    <div class="modal-box"></div>
+  </div>
 
   <div id="group-setup-modal" class="modal-backdrop hidden">
     <div class="modal-box"></div>

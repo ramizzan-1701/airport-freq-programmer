@@ -39,6 +39,7 @@ const ILS_PSEUDO_CATEGORY = "ILS";
 let customEntries = [];
 let groupSetupAcknowledged = false;
 let fixedGroupNames = [];
+let aboutAcknowledged = false;
 
 // ---------- tooltips ----------
 
@@ -190,6 +191,7 @@ async function init() {
   renderCycleStatus(status);
   groupSetupAcknowledged = status.group_setup_acknowledged;
   fixedGroupNames = status.fixed_group_names;
+  aboutAcknowledged = status.about_acknowledged;
 
   if (!status.loaded_cycle) {
     document.getElementById("load-panel").classList.remove("hidden");
@@ -201,7 +203,13 @@ async function init() {
 
   checkForUpdate(status.loaded_cycle);
 
+  // Last, so it opens over a screen that has already rendered rather
+  // than over an empty one -- on a fresh install that is the load
+  // screen, which is where "Get started" then leaves you.
+  if (!aboutAcknowledged) showAboutModal({ firstRun: true });
+
   document.getElementById("fetch-btn").addEventListener("click", doFetch);
+  document.getElementById("about-link").addEventListener("click", () => showAboutModal());
   document.getElementById("group-setup-link").addEventListener("click", () => showGroupSetupModal());
   document.getElementById("clear-filters").addEventListener("click", clearAllFilters);
   document.getElementById("custom-import-input").addEventListener("change", (e) => {
@@ -1483,6 +1491,106 @@ function copyNameButton(name) {
 }
 
 /** Reference view, opened from the topbar link -- read-only, no gate. */
+// ---------- about ----------
+//
+// The copy lives in afp/about.py and arrives over /api/about: one home
+// for it, and a drift test can hold it against README.md without having
+// to parse this file.
+
+let aboutCopy = null;
+
+/** The About screen. Shown once ahead of the load screen on a fresh
+ * install, and on demand from the topbar thereafter -- one component for
+ * both, so the two can't drift.
+ */
+async function showAboutModal({ firstRun = false } = {}) {
+  const modal = document.getElementById("about-modal");
+  const box = modal.querySelector(".modal-box");
+
+  if (!aboutCopy) {
+    try {
+      aboutCopy = await (await api("/api/about")).json();
+    } catch {
+      return; // nothing worth showing an empty dialog for
+    }
+  }
+
+  box.innerHTML = "";
+  box.appendChild(modalHeader("FTA-850 Frequency Programmer"));
+
+  // modal-scroll is what sits between the pinned header and footer.
+  const body = document.createElement("div");
+  body.className = "modal-scroll about-body";
+
+  for (const text of aboutCopy.intro) {
+    const p = document.createElement("p");
+    p.textContent = text;
+    body.appendChild(p);
+  }
+
+  const h3 = document.createElement("h3");
+  h3.textContent = "What it does";
+  body.appendChild(h3);
+
+  const ul = document.createElement("ul");
+  ul.className = "about-features";
+  for (const feature of aboutCopy.features) {
+    const li = document.createElement("li");
+    const b = document.createElement("b");
+    b.textContent = feature.lead;
+    li.append(b, document.createTextNode(" " + feature.text));
+    ul.appendChild(li);
+  }
+  body.appendChild(ul);
+
+  const meta = document.createElement("div");
+  meta.className = "about-meta";
+  const build = document.createElement("div");
+  build.textContent = `Version ${aboutCopy.app_version} — ${aboutCopy.release_date}`;
+  const author = document.createElement("div");
+  author.textContent = `Created by ${aboutCopy.author}`;
+  const contact = document.createElement("div");
+  contact.append(document.createTextNode("Questions, comments or suggestions: "));
+  const mail = document.createElement("a");
+  mail.href = `mailto:${aboutCopy.contact_email}`;
+  mail.textContent = aboutCopy.contact_email;
+  contact.appendChild(mail);
+  meta.append(build, author, contact);
+  body.appendChild(meta);
+  box.appendChild(body);
+
+  const footer = document.createElement("div");
+  footer.className = "modal-footer";
+  const actionsRow = document.createElement("div");
+  actionsRow.className = "modal-actions";
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "btn btn-primary";
+  // On a first run this is the step before the load screen, so it reads
+  // as moving forward rather than dismissing something.
+  closeBtn.textContent = firstRun ? "Get started" : "Close";
+  closeBtn.addEventListener("click", () => {
+    modal.classList.add("hidden");
+    if (!aboutAcknowledged) acknowledgeAbout();
+  });
+  actionsRow.append(closeBtn);
+  footer.appendChild(actionsRow);
+  box.appendChild(footer);
+
+  modal.classList.remove("hidden");
+  closeBtn.focus();
+}
+
+async function acknowledgeAbout() {
+  // Remembered server-side beside the group-setup flag, so it survives a
+  // reinstall of the app and a cleared webview store alike.
+  aboutAcknowledged = true;
+  try {
+    await api("/api/about/acknowledge", { method: "POST" });
+  } catch {
+    // Worst case it shows once more next launch -- not worth surfacing.
+  }
+}
+
 function showGroupSetupModal() {
   const modal = document.getElementById("group-setup-modal");
   const box = modal.querySelector(".modal-box");

@@ -821,6 +821,45 @@ main#app > .workspace,
 /* Wide variant for the custom-entry list. */
 .modal-box.wide { width: 660px; max-height: 88%; }
 
+/* ---------- about ---------- */
+.about-body { padding: 16px 24px 18px; }
+.about-body p {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink2);
+}
+.about-body h3 {
+  margin: 18px 0 10px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--acc);
+}
+.about-features {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink2);
+}
+.about-features li { margin-bottom: 9px; }
+.about-features li::marker { color: var(--ink3); }
+.about-features b { color: var(--ink); font-weight: 600; }
+
+/* Build and contact details, set apart from the prose above them. */
+.about-meta {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line2);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink3);
+}
+.about-meta a { color: var(--acc); }
+
 /* ---------- group setup: three zones ---------- */
 .setup-why {
   padding: 13px 24px;

@@ -14,7 +14,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from .. import classification
+from .. import RELEASE_DATE, __version__, about as about_copy, classification
 from ..counter import counter_status
 from ..custom_entries import CustomGroupCapacityError
 from ..export.fta850l import FTA_850L
@@ -24,6 +24,8 @@ from ..nasr.source import FetchResult
 from ..query import query as query_mod
 from ..selection import FIXED_GROUP_NAMES, orphan_tag_ids, select_entries
 from .models import (
+    AboutFeatureOut,
+    AboutOut,
     CategoryCountOut,
     CustomEntriesOut,
     CustomEntryOut,
@@ -90,6 +92,21 @@ def create_app(cache_dir: Path) -> FastAPI:
             ils_count=len(loaded.data.ils) if loaded else None,
             group_setup_acknowledged=state.group_setup_acknowledged,
             fixed_group_names=sorted(FIXED_GROUP_NAMES),
+            about_acknowledged=state.about_acknowledged,
+        )
+
+    @app.get("/api/about", response_model=AboutOut)
+    def about() -> AboutOut:
+        return AboutOut(
+            intro=list(about_copy.INTRO_PARAGRAPHS),
+            features=[
+                AboutFeatureOut(lead=lead, text=text)
+                for lead, text in about_copy.FEATURES
+            ],
+            author=about_copy.AUTHOR,
+            contact_email=about_copy.CONTACT_EMAIL,
+            app_version=__version__,
+            release_date=RELEASE_DATE,
         )
 
     @app.get("/api/check-update", response_model=UpdateCheckOut)
@@ -350,6 +367,12 @@ def create_app(cache_dir: Path) -> FastAPI:
             media_type="application/xml",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
+
+    @app.post("/api/about/acknowledge", response_model=StatusOut)
+    def acknowledge_about() -> StatusOut:
+        state: AppState = app.state.afp_state
+        state.acknowledge_about()
+        return status()
 
     @app.post("/api/group-setup/acknowledge", response_model=StatusOut)
     def acknowledge_group_setup() -> StatusOut:

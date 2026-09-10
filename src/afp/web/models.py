@@ -86,6 +86,26 @@ class StatusOut(BaseModel):
     ils_count: int | None = None
     group_setup_acknowledged: bool = False
     fixed_group_names: list[str] = Field(default_factory=list)
+    # False until the About screen has been dismissed once, which is what
+    # makes it appear ahead of the load screen on a fresh install.
+    about_acknowledged: bool = False
+
+
+class AboutFeatureOut(BaseModel):
+    """One "What it does" bullet, split at the README's bold lead so the
+    screen can style it without markdown reaching the frontend.
+    """
+    lead: str
+    text: str
+
+
+class AboutOut(BaseModel):
+    intro: list[str]
+    features: list[AboutFeatureOut]
+    author: str
+    contact_email: str
+    app_version: str
+    release_date: str
 
 
 class UpdateCheckOut(BaseModel):

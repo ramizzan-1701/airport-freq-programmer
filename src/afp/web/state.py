@@ -39,8 +39,12 @@ class AppState:
 
         self.custom_entries_path = self.cache_dir / "custom_entries.json"
         self.group_setup_path = self.cache_dir / "group_setup.json"
+        self.about_path = self.cache_dir / "about.json"
         self.custom_entries: list[Entry] = local_store.load_custom_entries(self.custom_entries_path)
         self.group_setup_acknowledged: bool = local_store.load_group_setup_acknowledged(self.group_setup_path)
+        # False on a fresh install, which is what makes the About screen
+        # show itself once ahead of the load screen.
+        self.about_acknowledged: bool = local_store.load_about_acknowledged(self.about_path)
 
     def available_cycles(self) -> list[date]:
         """Locally cached cycles that have all three required CSVs already
@@ -98,3 +102,7 @@ class AppState:
     def acknowledge_group_setup(self) -> None:
         self.group_setup_acknowledged = True
         local_store.save_group_setup_acknowledged(self.group_setup_path, True)
+
+    def acknowledge_about(self) -> None:
+        self.about_acknowledged = True
+        local_store.save_about_acknowledged(self.about_path, True)
