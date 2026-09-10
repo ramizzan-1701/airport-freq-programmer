@@ -116,6 +116,16 @@ class FilterOptionsOut(BaseModel):
     ils_system_types: list[LabeledOption]
 
 
+class ResolvedCenterOut(BaseModel):
+    """Echoes back what a radius centre resolved to, so the field can be
+    checked before the filter is added rather than failing the whole
+    query afterwards.
+    """
+    center: str
+    lat: float
+    lon: float
+
+
 class EntryOut(BaseModel):
     tag_name: str
     freq_mhz: float

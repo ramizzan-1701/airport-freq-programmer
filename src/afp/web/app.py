@@ -33,6 +33,7 @@ from .models import (
     FreqCategoryOption,
     LabeledOption,
     QueryResultOut,
+    ResolvedCenterOut,
     StatusOut,
     UpdateCheckOut,
 )
@@ -170,6 +171,44 @@ def create_app(cache_dir: Path) -> FastAPI:
     def cities(states: list[str] | None = Query(default=None)) -> list[str]:
         loaded = _require_loaded(app.state.afp_state)
         return query_mod.list_cities(loaded.conn, states=frozenset(states) if states else None)
+
+    @app.get("/api/resolve-center", response_model=ResolvedCenterOut)
+    def resolve_radius_center(center: str = Query(...)) -> ResolvedCenterOut:
+        """Checks one radius centre on its own.
+
+        The centre is the only free-text field in the rail, and an
+        unresolvable one used to fail the whole query -- every other
+        filter the user had set stopped reporting, under a generic
+        "Query failed", because of one typo. Resolving it separately lets
+        the field own its error.
+        """
+        loaded = _require_loaded(app.state.afp_state)
+        raw = center.strip()
+        if not raw:
+            raise HTTPException(status_code=400, detail="Enter an airport ID or lat,lon.")
+
+        # Airport IDs are stored uppercase; echoing the canonical form
+        # back is what keeps the chip reading "60nm of LAX" after someone
+        # types "lax", and what gets stored on the filter thereafter.
+        arg: str | tuple[float, float] = raw
+        canonical = raw.upper()
+        if "," in raw:
+            lat_str, _, lon_str = raw.partition(",")
+            try:
+                arg = (float(lat_str), float(lon_str))
+                canonical = raw
+            except ValueError:
+                raise HTTPException(
+                    status_code=400, detail="Not a valid lat,lon pair."
+                ) from None
+
+        try:
+            lat, lon = query_mod.resolve_center(loaded.conn, arg)
+        except ValueError:
+            raise HTTPException(
+                status_code=404, detail=f"No airport with ID {raw.upper()}."
+            ) from None
+        return ResolvedCenterOut(center=canonical, lat=lat, lon=lon)
 
     @app.post("/api/query", response_model=QueryResultOut)
     def run_query(body: FilterStateIn) -> QueryResultOut:

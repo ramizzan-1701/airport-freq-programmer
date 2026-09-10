@@ -302,6 +302,78 @@ def test_query_unknown_radius_center_returns_error(client):
     assert "ZZZ" in res.json()["detail"]
 
 
+# ---------- radius centre validation ----------
+#
+# The rail checks the centre through this endpoint before adding the
+# filter, so a typo complains on the field instead of failing the whole
+# query and blanking every other filter's result.
+
+
+def test_resolve_center_accepts_an_airport_id(client):
+    res = client.get("/api/resolve-center", params={"center": "AAA"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["center"] == "AAA"
+    assert isinstance(body["lat"], float) and isinstance(body["lon"], float)
+
+
+def test_resolve_center_is_case_and_space_insensitive(client):
+    """Matches resolve_center's own normalisation -- the field is free
+    text, so "  aaa " has to reach the same airport the query would, and
+    come back in the canonical spelling the chip then displays.
+    """
+    res = client.get("/api/resolve-center", params={"center": "  aaa "})
+    assert res.status_code == 200
+    assert res.json()["center"] == "AAA"
+    assert res.json()["lat"] == client.get(
+        "/api/resolve-center", params={"center": "AAA"}
+    ).json()["lat"]
+
+
+def test_resolve_center_accepts_a_lat_lon_pair(client):
+    res = client.get("/api/resolve-center", params={"center": "33.94,-118.41"})
+    assert res.status_code == 200
+    assert (res.json()["lat"], res.json()["lon"]) == (33.94, -118.41)
+    # Not upper-cased -- there is no canonical form to impose on digits.
+    assert res.json()["center"] == "33.94,-118.41"
+
+
+def test_a_resolved_center_is_accepted_by_the_query(client):
+    """The point of resolving first: whatever comes back must be a value
+    /api/query will take, or the field would pass something the query
+    then rejects.
+    """
+    center = client.get("/api/resolve-center", params={"center": "aaa"}).json()["center"]
+    res = client.post(
+        "/api/query",
+        json={"radius_filters": [{"center": center, "radius_nm": 5, "mode": "include"}]},
+    )
+    assert res.status_code == 200
+    assert {e["airport_id"] for e in res.json()["entries"]} == {"AAA"}
+
+
+def test_resolve_center_rejects_an_unknown_airport_id(client):
+    res = client.get("/api/resolve-center", params={"center": "ZZZ"})
+    assert res.status_code == 404
+    assert "ZZZ" in res.json()["detail"]
+
+
+def test_resolve_center_rejects_a_malformed_lat_lon_pair(client):
+    res = client.get("/api/resolve-center", params={"center": "33.94,west"})
+    assert res.status_code == 400
+    assert "lat,lon" in res.json()["detail"]
+
+
+def test_resolve_center_rejects_blank_input(client):
+    res = client.get("/api/resolve-center", params={"center": "   "})
+    assert res.status_code == 400
+
+
+def test_resolve_center_requires_loaded_data(empty_client):
+    res = empty_client.get("/api/resolve-center", params={"center": "AAA"})
+    assert res.status_code == 400
+
+
 def test_query_raw_mode_differs_from_smart_mode(client):
     smart = client.post("/api/query", json={"mode": "smart"}).json()
     raw = client.post("/api/query", json={"mode": "raw"}).json()

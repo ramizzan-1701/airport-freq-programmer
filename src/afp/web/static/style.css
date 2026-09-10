@@ -449,6 +449,15 @@ main#app > .workspace,
 .radius-item button:hover { color: var(--warn); }
 
 .radius-form { display: flex; gap: 6px; }
+
+/* Sits under the field that caused it, in the same pink the over-cap
+   counter uses -- one colour for "this is why you cannot proceed". */
+.field-error {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--warn);
+}
+.radius-form input.invalid { border-color: var(--warn); }
 .radius-form input,
 .radius-form select {
   background: var(--input);

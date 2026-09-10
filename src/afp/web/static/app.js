@@ -1001,7 +1001,8 @@ function renderRadiusFilters(container) {
   // a 336px rail, so the second half moves to the tooltip rather than
   // being silently clipped.
   centerInput.placeholder = "Airport ID";
-  tip(centerInput, "An airport ID (LAX), or a latitude,longitude pair (33.94,-118.41).");
+  const CENTER_TIP = "An airport ID (LAX), or a latitude,longitude pair (33.94,-118.41).";
+  tip(centerInput, CENTER_TIP);
   const radiusInput = document.createElement("input");
   radiusInput.className = "radius-nm";
   radiusInput.type = "number";
@@ -1018,18 +1019,79 @@ function renderRadiusFilters(container) {
   const addBtn = document.createElement("button");
   addBtn.className = "btn btn-small";
   addBtn.textContent = "Add";
-  addBtn.addEventListener("click", () => {
+
+  // The centre is the only free-text field in the rail. An unresolvable
+  // one used to be accepted and then fail the whole query, so a typo
+  // here blanked the counter and every other filter's result under a
+  // generic "Query failed". Check it first and keep the complaint on the
+  // field that caused it.
+  const error = document.createElement("div");
+  error.className = "field-error";
+  error.setAttribute("role", "alert");
+  error.hidden = true;
+
+  function clearError() {
+    error.hidden = true;
+    error.textContent = "";
+    centerInput.classList.remove("invalid");
+    centerInput.removeAttribute("aria-invalid");
+    centerInput.setAttribute("data-tip", CENTER_TIP);
+  }
+  function showError(message) {
+    error.textContent = message;
+    error.hidden = false;
+    centerInput.classList.add("invalid");
+    centerInput.setAttribute("aria-invalid", "true");
+    // The field's own tooltip opens on focus and renders in exactly the
+    // spot the error occupies, covering it. Suspend it while there is an
+    // error: the error is the more specific of the two, and clearError
+    // hands the tip back as soon as the user starts retyping.
+    centerInput.removeAttribute("data-tip");
+    centerInput.focus();
+  }
+  centerInput.addEventListener("input", clearError);
+
+  async function addRadiusFilter() {
     const center = centerInput.value.trim();
     const radiusNm = parseFloat(radiusInput.value);
-    if (!center || !Number.isFinite(radiusNm) || radiusNm <= 0) return;
-    selected.radiusFilters.push({ center, radius_nm: radiusNm, mode: modeSelect.value });
+    if (!center) return showError("Enter an airport ID or lat,lon.");
+    if (!Number.isFinite(radiusNm) || radiusNm <= 0) return showError("Enter a distance in NM.");
+
+    let resolved = center;
+    addBtn.disabled = true;
+    try {
+      const res = await api(`/api/resolve-center?center=${encodeURIComponent(center)}`);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return showError(body.detail || "Couldn't find that location.");
+      // Store what the server matched, not what was typed, so the chip
+      // reads "60nm of LAX" for someone who typed "lax".
+      resolved = body.center || center;
+    } catch {
+      return showError("Couldn't check that location.");
+    } finally {
+      addBtn.disabled = false;
+    }
+
+    clearError();
+    selected.radiusFilters.push({ center: resolved, radius_nm: radiusNm, mode: modeSelect.value });
     centerInput.value = "";
     radiusInput.value = "";
     renderList();
     scheduleQuery();
-  });
+  }
+
+  addBtn.addEventListener("click", addRadiusFilter);
+  for (const input of [centerInput, radiusInput]) {
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        addRadiusFilter();
+      }
+    });
+  }
   form.append(centerInput, radiusInput, modeSelect, addBtn);
   wrap.appendChild(form);
+  wrap.appendChild(error);
 
   container.appendChild(wrap);
 }
