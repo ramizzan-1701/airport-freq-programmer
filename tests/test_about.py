@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 import afp
 from afp import about
 from afp.web import create_app
+from afp.web.app import STATIC_DIR
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -157,6 +158,23 @@ def test_every_workflow_steps_bold_markers_are_balanced():
     """
     for i, step in enumerate(about.WORKFLOW_STEPS, start=1):
         assert step.count("**") % 2 == 0, f"unbalanced bold markers in step {i}: {step!r}"
+
+
+def test_the_workflow_names_buttons_that_actually_exist():
+    """Steps 2 and 6 tell the reader to go and press something. If those
+    buttons get renamed again, the instructions become a scavenger hunt
+    -- so hold them against the markup rather than trusting memory.
+    """
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    labels = {"Groups setup help", "Generate FTA-850 XML"}
+    for label in labels:
+        assert f">{label}<" in html, f"{label!r} is no longer a button in index.html"
+
+    steps = " ".join(about.WORKFLOW_STEPS)
+    for label in labels:
+        assert label.upper() in steps.upper(), (
+            f"the workflow no longer refers to the {label!r} button by its real name"
+        )
 
 
 def test_the_workflow_uses_the_arrow_glyph_not_an_ascii_arrow():

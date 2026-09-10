@@ -75,17 +75,17 @@ WORKFLOW_INTRO = (
 
 WORKFLOW_STEPS: tuple[str, ...] = (
     "Open YCE-46. Go to: **Setup → Memory Group Name.**",
-    "Rename 6 of the 9 Groups. (see GROUPS SETUP in this app)",
+    "Rename 6 of the 9 Groups. (see GROUPS SETUP HELP in this app)",
     "In YCE-46 editor: Go to **File → XML File → Save** to save your existing "
     "frequency list from your radio.",
     "Import this XML file into this app. It will import all your frequencies "
     "saved to custom groups.",
     "Filter for the frequencies you want to keep.",
-    "“Generate XML”. It will include the NASR frequencies in their alphabetized "
-    "groups AND the custom frequency groups you imported.",
+    "“Generate FTA-850 XML”. It will include the NASR frequencies in their "
+    "alphabetized groups AND the custom frequency groups you imported.",
     "Go back to YCE-46 and select **File → XML File → Open.** Select the "
     "generated XML file from this app.",
-    "Select Transfer → Program to Radio to upload the new frequencies to your "
+    "Select **Transfer → Program to Radio** to upload the new frequencies to your "
     "radio!",
 )
 
