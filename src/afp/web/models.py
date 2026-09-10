@@ -92,8 +92,8 @@ class StatusOut(BaseModel):
 
 
 class AboutFeatureOut(BaseModel):
-    """One "What it does" bullet, split at the README's bold lead so the
-    screen can style it without markdown reaching the frontend.
+    """One "What it does" bullet, pre-split at its bold lead so the screen
+    can style it without markdown reaching the frontend.
     """
     lead: str
     text: str

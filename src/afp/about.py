@@ -1,12 +1,14 @@
 """Copy for the About screen.
 
-Kept here rather than in the frontend so there is one copy of it, and so
-tests/test_about.py can check it still matches README.md without having
-to parse JavaScript. The web layer serves it; app.js only renders it.
+Kept here rather than inline in app.js for the same reason the category
+labels and status names are: content lives in Python, and the web layer
+serves it. Editing the screen means editing this file, with no markup to
+pick through.
 
-These strings are README.md's opening two paragraphs and its "What it
-does" list, verbatim apart from the markdown bold markers. Edit them
-together -- the drift test fails otherwise.
+Page 1 started as README.md's opening paragraphs and its "What it does"
+list. The two are free to diverge -- nothing checks them against each
+other, and the README speaks to someone deciding whether to install the
+app while this speaks to someone already looking at it.
 """
 
 from __future__ import annotations
@@ -21,10 +23,9 @@ INTRO_PARAGRAPHS: tuple[str, ...] = (
 )
 
 # Phrases inside INTRO_PARAGRAPHS that render as links, and where they
-# point. Deliberately not markup inside the paragraph: the text above has
-# to stay comparable to README.md word for word, and a phrase that stops
-# appearing there is a typo worth failing a test over rather than a link
-# that silently goes missing.
+# point. Kept out of the paragraph so the copy above stays plain prose --
+# no markup to read around when editing it. A phrase that stops appearing
+# in the text fails a test rather than silently rendering no link.
 INTRO_LINKS: tuple[tuple[str, str], ...] = (
     (
         "YCE-46 programming software",
@@ -32,9 +33,9 @@ INTRO_LINKS: tuple[tuple[str, str], ...] = (
     ),
 )
 
-# (bold lead, the rest of the bullet) -- the split the README's own
-# markdown makes, preserved so the screen can render the lead in bold
-# rather than shipping markup through the API.
+# (bold lead, the rest of the bullet) -- split here rather than shipping
+# markdown through the API, so the screen can render the lead in bold
+# without parsing anything.
 FEATURES: tuple[tuple[str, str], ...] = (
     (
         "Fetches",
@@ -63,10 +64,9 @@ FEATURES: tuple[tuple[str, str], ...] = (
 
 # ---------- page 2: the end-to-end workflow ----------
 #
-# Not from the README -- this is the one place that says how the app and
-# YCE-46 fit together across a whole session. **double asterisks** mark
-# the runs that render bold, the same convention the README's bullets
-# use; the arrows are the app's usual glyph rather than "->".
+# The one place that says how the app and YCE-46 fit together across a
+# whole session. **double asterisks** mark the runs that render bold;
+# the arrows are the app's usual glyph rather than "->".
 
 WORKFLOW_INTRO = (
     "Proper workflow to use this app in conjunction with the Yaesu YCE-46 "

@@ -1493,9 +1493,8 @@ function copyNameButton(name) {
 /** Reference view, opened from the topbar link -- read-only, no gate. */
 // ---------- about ----------
 //
-// The copy lives in afp/about.py and arrives over /api/about: one home
-// for it, and a drift test can hold it against README.md without having
-// to parse this file.
+// The copy lives in afp/about.py and arrives over /api/about, the same
+// way category labels and status names do.
 
 let aboutCopy = null;
 const ABOUT_PAGES = 2;
@@ -1663,10 +1662,9 @@ function appendBoldMarkedText(el, text) {
 
 /** Appends `text` to `el`, turning any of `links`' phrases into anchors.
  *
- * The paragraphs arrive as plain text -- the copy has to stay comparable
- * to README.md, so the links are described separately rather than marked
- * up inside it. Takes the earliest match on each pass so several links in
- * one paragraph still come out in order.
+ * The paragraphs arrive as plain text and the links are described
+ * separately, so the copy stays free of markup. Takes the earliest match
+ * on each pass so several links in one paragraph still come out in order.
  */
 function appendLinkedText(el, text, links) {
   let rest = text;

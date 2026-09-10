@@ -1,8 +1,7 @@
 """The About screen: its once-only first run, the build facts it shows,
-and the fact that its text is still the README's.
+and the internal consistency of its copy.
 """
 
-import re
 from datetime import date
 from pathlib import Path
 
@@ -21,19 +20,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 def empty_client(tmp_path) -> TestClient:
     """A fresh install: no cache dir contents, nothing acknowledged."""
     return TestClient(create_app(cache_dir=tmp_path))
-
-
-@pytest.fixture
-def readme() -> str:
-    return (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-
-
-def _collapse(text: str) -> str:
-    """README paragraphs are hard-wrapped at ~90 chars; the About screen
-    renders them as single strings. Compare on the words, not the line
-    breaks.
-    """
-    return " ".join(text.split())
 
 
 # ---------- shown once, then remembered ----------
@@ -183,40 +169,3 @@ def test_the_workflow_uses_the_arrow_glyph_not_an_ascii_arrow():
     """
     for step in about.WORKFLOW_STEPS:
         assert "->" not in step, step
-
-
-# ---------- the text is still the README's ----------
-#
-# The About screen exists to say what the README says. These fail if
-# either side is edited alone.
-
-
-def test_the_intro_is_the_readmes_intro(readme):
-    body = readme.split("# Airport Frequency Programmer", 1)[1].split("## What it does", 1)[0]
-    paragraphs = [_collapse(p) for p in body.strip().split("\n\n") if p.strip()]
-
-    assert len(paragraphs) == 2, "README intro is no longer two paragraphs"
-    # Bold markers are markdown, not content -- the screen renders the
-    # radio name as plain text.
-    expected = [p.replace("**", "") for p in paragraphs]
-    assert list(about.INTRO_PARAGRAPHS) == expected, (
-        "README intro and afp.about.INTRO_PARAGRAPHS have drifted apart"
-    )
-
-
-def test_the_feature_list_is_the_readmes_feature_list(readme):
-    body = readme.split("## What it does", 1)[1].split("## Running it", 1)[0]
-    bullets = [_collapse(b) for b in re.findall(r"^- (.+?)(?=\n- |\Z)", body.strip(), re.DOTALL | re.MULTILINE)]
-
-    assert len(bullets) == 5, "README's What it does list changed length"
-
-    expected = []
-    for bullet in bullets:
-        # Each bullet is "**Lead** rest" or "**Lead.** rest".
-        match = re.match(r"\*\*(.+?)\*\*\s*(.+)", bullet, re.DOTALL)
-        assert match, f"README bullet is not in **lead** rest form: {bullet!r}"
-        expected.append((match.group(1), _collapse(match.group(2))))
-
-    assert [tuple(f) for f in about.FEATURES] == expected, (
-        "README's What it does list and afp.about.FEATURES have drifted apart"
-    )
