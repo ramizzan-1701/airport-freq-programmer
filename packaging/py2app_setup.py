@@ -18,9 +18,34 @@ The built app is unsigned: Gatekeeper blocks it on first open until the
 user right-click > Open, or it's signed with a paid Apple Developer ID.
 """
 
+import subprocess
+import sys
 from pathlib import Path
 
 from setuptools import Distribution, setup
+
+HERE = Path(__file__).parent
+ICONSET = HERE / "icons" / "AirportFreqProgrammer.iconset"
+ICNS = HERE / "icons" / "AirportFreqProgrammer.icns"
+
+
+def build_icns() -> str:
+    """Compile the .iconset into the .icns py2app wants, using Apple's
+    own iconutil.
+
+    The .icns is generated here rather than committed because iconutil
+    exists only on macOS -- which is also the only place py2app runs, so
+    there is no chicken-and-egg problem. The .iconset beside it is the
+    committed source: the designer's per-size PNGs under the names
+    iconutil expects.
+    """
+    if sys.platform != "darwin":
+        raise SystemExit("py2app builds only run on macOS; nothing to do here.")
+    subprocess.run(
+        ["iconutil", "--convert", "icns", str(ICONSET), "--output", str(ICNS)],
+        check=True,
+    )
+    return str(ICNS)
 
 
 class Py2appDistribution(Distribution):
@@ -53,11 +78,11 @@ APP = ["packaging/launcher.py"]
 DATA_FILES = [
     (
         "afp/web/static",
-        [
-            "src/afp/web/static/index.html",
-            "src/afp/web/static/app.js",
-            "src/afp/web/static/style.css",
-        ],
+        # Globbed, not listed. This was three hard-coded filenames, and
+        # adding the favicon PNGs beside them would have shipped a mac
+        # build quietly missing its tab icon -- the same way the fonts
+        # were once missed a directory further down.
+        sorted(str(p) for p in Path("src/afp/web/static").iterdir() if p.is_file()),
     ),
     # Self-hosted fonts, in their own destination directory so the
     # url("fonts/...") references in style.css resolve. Globbed rather
@@ -66,6 +91,8 @@ DATA_FILES = [
 ]
 
 OPTIONS = {
+    # Built from the committed .iconset just above -- see build_icns.
+    "iconfile": build_icns(),
     # anyio is listed as a whole package on purpose: it picks its backend
     # with import_module(f"anyio._backends._{name}") at runtime, so the
     # dependency graph shows nothing and py2app shipped anyio without

@@ -25,6 +25,7 @@ from PyInstaller.utils.hooks import collect_all
 # SPECPATH is set by PyInstaller to this file's directory.
 REPO_ROOT = Path(SPECPATH).parent
 STATIC_SRC = REPO_ROOT / "src" / "afp" / "web" / "static"
+ICON_ICO = Path(SPECPATH) / "icons" / "app.ico"
 
 # pywebview loads its platform backend (EdgeChromium/WebView2 here)
 # dynamically and ships non-Python support files, so collect it wholesale
@@ -87,5 +88,10 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    # icon: added during the visual-design pass, once there's a real logo.
+    # Multi-resolution, built from the designer's per-size art by
+    # packaging/make_icons.py and committed -- so this build needs no
+    # image tooling. PyInstaller copies its entries into the .exe's
+    # RT_ICON resources, which is what Explorer, the taskbar and the
+    # window's own title bar all read.
+    icon=str(ICON_ICO),
 )
