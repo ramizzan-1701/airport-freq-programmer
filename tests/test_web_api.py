@@ -655,24 +655,68 @@ def test_query_zero_faa_matches_with_custom_entries_still_generatable_shape(clie
     assert result["total_count"] == 1
 
 
-def test_generate_merges_custom_entries_and_the_preview_lists_them_too(client):
-    """The preview table is meant to be a picture of the XML about to be
-    written, so an entry that reaches the file has to reach the table --
-    in the same order, custom entries last.
+def test_generate_merges_custom_entries_and_the_preview_lists_them_first(client):
+    """The preview is a picture of the XML about to be written, so an
+    entry that reaches the file has to reach the table.
+
+    Order is the one place the two differ on purpose: the file appends
+    custom entries, the table leads with them. The preview stops at
+    MAX_DISPLAYED_ENTRIES, so trailing them behind every FAA row would
+    push them past the cut in any broad query -- exactly when someone is
+    checking their own entries survived.
     """
     xml = _custom_xml([Entry(tag_name="HOME-BASE", freq_mhz=122.725, group="PERSONAL", lat=1.0, lon=-1.0)])
     client.post("/api/custom-entries/import", content=xml, headers={"Content-Type": "application/xml"})
 
     query_result = client.post("/api/query", json={}).json()
     tags = [e["tag_name"] for e in query_result["entries"]]
-    assert "HOME-BASE" in tags
-    assert tags[-1] == "HOME-BASE", "custom entries come after the FAA ones, as in the XML"
+    assert tags[0] == "HOME-BASE", "custom entries lead the preview"
     assert len(query_result["entries"]) == query_result["total_count"]
 
     res = client.post("/api/generate", json={})
     assert res.status_code == 200
     assert b"<TAG_NAME>HOME-BASE</TAG_NAME>" in res.content
     assert b"<GROUP>PERSONAL</GROUP>" in res.content
+
+
+def test_custom_entries_stay_visible_when_the_preview_is_truncated(client, monkeypatch):
+    """The whole point of leading with them. Cap the page at two rows and
+    the custom entry still has to be on it, however many FAA rows match.
+    """
+    from afp.web import app as web_app
+
+    monkeypatch.setattr(web_app, "MAX_DISPLAYED_ENTRIES", 2)
+
+    xml = _custom_xml([Entry(tag_name="HOME-BASE", freq_mhz=122.725, group="PERSONAL", lat=1.0, lon=-1.0)])
+    client.post("/api/custom-entries/import", content=xml, headers={"Content-Type": "application/xml"})
+
+    body = client.post("/api/query", json={}).json()
+    assert len(body["entries"]) == 2
+    assert body["entries"][0]["tag_name"] == "HOME-BASE"
+    assert body["truncated"] is True
+
+
+def test_truncated_counts_the_custom_entries_too(client, monkeypatch):
+    """truncated once measured the FAA rows alone while the table listed
+    both, so a page that stopped short could still report nothing cut.
+    """
+    from afp.web import app as web_app
+
+    baseline = client.post("/api/query", json={}).json()
+    faa_count = baseline["count"]
+
+    # A page exactly the size of the FAA result: without the custom
+    # entries nothing is cut, with them the last one falls off.
+    monkeypatch.setattr(web_app, "MAX_DISPLAYED_ENTRIES", faa_count)
+    assert client.post("/api/query", json={}).json()["truncated"] is False
+
+    xml = _custom_xml([Entry(tag_name="HOME-BASE", freq_mhz=122.725, group="PERSONAL", lat=1.0, lon=-1.0)])
+    client.post("/api/custom-entries/import", content=xml, headers={"Content-Type": "application/xml"})
+
+    body = client.post("/api/query", json={}).json()
+    assert body["total_count"] == faa_count + 1
+    assert len(body["entries"]) == faa_count
+    assert body["truncated"] is True, "a row fell off the page but truncated said otherwise"
 
 
 def test_preview_flags_custom_rows_and_leaves_their_airport_fields_empty(client):

@@ -263,18 +263,24 @@ def create_app(cache_dir: Path) -> FastAPI:
 
         # The radio's cap applies to filtered + held custom entries
         # together (spec §5 step 7), and the preview lists them together
-        # too, in the same order /api/generate writes them to the XML --
-        # the table is meant to be a picture of the file about to be
-        # produced, so an entry that lands in the file belongs in it.
-        all_entries = entries + app_state.custom_entries
+        # too -- the table is meant to be a picture of the file about to
+        # be produced, so an entry that lands in the file belongs in it.
+        #
+        # Custom entries lead, which is the one place this deliberately
+        # differs from the XML's own order (/api/generate appends them).
+        # They are the handful of rows the user is most likely looking
+        # for, and the preview stops at MAX_DISPLAYED_ENTRIES: trailing
+        # them behind 26,000 FAA rows would put them past the cut in
+        # every unfiltered view, which is exactly when someone wants to
+        # confirm their own entries survived.
+        custom = app_state.custom_entries
+        all_entries = custom + entries
         total_count = len(all_entries)
         status_result = counter_status(total_count, FTA_850L)
         display = all_entries[:MAX_DISPLAYED_ENTRIES]
-        # Everything from this index on came out of the user's radio.
-        custom_start = len(entries)
         entries_out = []
         for i, e in enumerate(display):
-            if i >= custom_start:
+            if i < len(custom):
                 # No airport lookup: the tag prefix of a hand-added entry
                 # is whatever the user typed into the radio, so matching
                 # it against FAA records would attach a real airport's
@@ -348,7 +354,11 @@ def create_app(cache_dir: Path) -> FastAPI:
             level=status_result.level,
             cap=status_result.cap,
             entries=entries_out,
-            truncated=len(entries) > MAX_DISPLAYED_ENTRIES,
+            # Measured over what the table actually lists, not the FAA
+            # rows alone: with 498 filtered and 6 custom, the page stops
+            # at 500 but the old test said nothing was cut, so the note
+            # read "Showing all 504 entries" above 500 of them.
+            truncated=total_count > MAX_DISPLAYED_ENTRIES,
             custom_entry_count=len(app_state.custom_entries),
             custom_group_count=len({e.group for e in app_state.custom_entries}),
             category_counts=category_counts,
