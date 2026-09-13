@@ -117,6 +117,39 @@ def test_the_windows_spec_points_at_the_ico():
     assert 'ICON_ICO = Path(SPECPATH) / "icons" / "app.ico"' in spec
 
 
+def test_the_windows_build_stays_onedir():
+    """A onefile .exe unpacks itself to temp and runs from there, which
+    Defender's ML model scored as Trojan:Win32/Wacatac.B!ml on a
+    downloaded CI build -- a heuristic verdict, but enough to quarantine
+    the app before anyone could open it.
+
+    Collapsing this back to onefile looks like a tidy-up and silently
+    brings that back, so it is pinned here rather than left to the
+    comment in the spec.
+    """
+    spec = (REPO_ROOT / "packaging" / "afp.spec").read_text(encoding="utf-8")
+    assert "exclude_binaries=True" in spec, "EXE() is packing the binaries in again"
+    assert "coll = COLLECT(" in spec, "no COLLECT step, so this is a onefile build"
+
+
+def test_ci_uploads_the_whole_app_folder():
+    """upload-artifact roots the archive at the least common ancestor of
+    what it matches, so naming the app folder would upload its contents
+    loose and unzipping would strew 233 files across the download folder.
+    """
+    workflow = (REPO_ROOT / ".github" / "workflows" / "build-desktop.yml").read_text(encoding="utf-8")
+    windows_job = workflow.split("Build Windows", 1)[1].split("build-macos", 1)[0]
+    upload_paths = [
+        line.strip() for line in windows_job.splitlines() if line.strip().startswith("path:")
+    ]
+    assert upload_paths == ["path: dist"], (
+        f"the Windows artifact no longer uploads the dist directory: {upload_paths}"
+    )
+    assert "path: dist/AirportFreqProgrammer" not in windows_job, (
+        "pointing at the app folder flattens it out of the archive"
+    )
+
+
 # ---------- macOS ----------
 
 

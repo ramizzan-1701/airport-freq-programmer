@@ -68,18 +68,27 @@ a = Analysis(
 
 pyz = PYZ(a.pure)
 
+# onedir, not onefile. A onefile .exe carries the runtime, every DLL and
+# all the web assets inside itself and unpacks them to a temp directory
+# at launch -- and unpack-then-execute is what a dropper does, so
+# Defender's ML model scored a CI-built one as Trojan:Win32/Wacatac.B!ml
+# (a heuristic verdict, not a signature match; the same binary built
+# locally scanned clean). Being unsigned removes the one signal that
+# would offset it.
+#
+# Splitting the runtime back out removes that behaviour entirely. The
+# cost is a folder instead of a single file, which is nearly free here:
+# the artifact was already a .zip that had to be unzipped either way.
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
+    exclude_binaries=True,
     name="AirportFreqProgrammer",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    runtime_tmpdir=None,
     # No console window behind the app -- this is a GUI, and a stray
     # terminal reads as a crash to a non-technical user.
     console=False,
@@ -94,4 +103,14 @@ exe = EXE(
     # RT_ICON resources, which is what Explorer, the taskbar and the
     # window's own title bar all read.
     icon=str(ICON_ICO),
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name="AirportFreqProgrammer",
 )

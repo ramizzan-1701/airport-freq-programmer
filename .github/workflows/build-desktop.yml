@@ -58,7 +58,13 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: AirportFreqProgrammer-windows
-          path: dist/AirportFreqProgrammer.exe
+          # dist, not dist/AirportFreqProgrammer: upload-artifact roots the
+          # archive at the least common ancestor of what it matches, so
+          # naming the app folder would upload its contents loose and
+          # unzipping would strew the runtime across the download folder.
+          # Pointing a level up keeps AirportFreqProgrammer/ as the single
+          # top-level entry, still one unzip.
+          path: dist
           if-no-files-found: error
 
   build-macos:
