@@ -62,7 +62,7 @@ def _build_filter_state(body: FilterStateIn, loaded: LoadedCycle):
 
 
 def create_app(cache_dir: Path) -> FastAPI:
-    app = FastAPI(title="Airport Frequency Programmer")
+    app = FastAPI(title="FTA-850 Frequency Manager")
     app.state.afp_state = AppState(cache_dir=cache_dir)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 

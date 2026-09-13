@@ -87,7 +87,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="AirportFreqProgrammer",
+    name="FTA850FrequencyManager",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

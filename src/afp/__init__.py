@@ -1,4 +1,4 @@
-"""Airport Frequency Programmer.
+"""FTA-850 Frequency Manager.
 
 The version lives here rather than being read back out of the installed
 distribution's metadata: importlib.metadata needs a dist-info directory,

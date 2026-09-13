@@ -50,7 +50,7 @@ def test_app_is_actually_reachable_on_the_reported_port(running_server):
     port = _wait_for_port(running_server)
     with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as response:
         assert response.status == 200
-        assert "Airport Frequency Programmer" in response.read().decode()
+        assert "FTA-850 Frequency Manager" in response.read().decode()
 
 
 def test_static_assets_are_served_on_the_reported_port(running_server):
@@ -101,6 +101,20 @@ def test_default_cache_dir_is_absolute_and_outside_the_checkout():
 #
 # webview.start() can't run under pytest, so these assert the numbers
 # handed to create_window rather than the window itself.
+
+
+def test_the_data_directory_name_does_not_follow_the_app_name():
+    """APP_NAME is a real path, not a label.
+
+    The app was renamed to "FTA-850 Frequency Manager" and this stayed
+    "AirportFreqProgrammer" on purpose. Finishing the rename here looks
+    like tidying up a leftover, and instead points every existing install
+    at an empty directory: downloaded NASR cycles gone, imported custom
+    entries gone, the About and group-setup flags reset, and no error
+    saying why. Changing it needs a migration, not an edit.
+    """
+    assert APP_NAME == "AirportFreqProgrammer"
+    assert " " not in APP_NAME, "a path segment with spaces is a nuisance to script around"
 
 
 def test_the_window_cannot_be_dragged_below_the_size_the_ui_was_composed_at():

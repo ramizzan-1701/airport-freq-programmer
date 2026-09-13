@@ -1,7 +1,7 @@
 [project]
 name = "afp"
 dynamic = ["version"]
-description = "Airport Frequency Programmer - core pipeline"
+description = "FTA-850 Frequency Manager - core pipeline"
 requires-python = ">=3.10"
 dependencies = [
     "requests>=2.31",

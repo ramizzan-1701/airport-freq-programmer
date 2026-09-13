@@ -11,6 +11,11 @@ Encodes the lessons learned building this by hand as validation checks
     same tag legitimately appears in both that group and a generated one
     (spec §5 step 9 keeps custom entries un-deduplicated for exactly this
     reason). A repeat inside one group is still a collision.
+
+    The file-wide rule this replaced was written from a hand-built file
+    and was wrong. Cross-group duplicates have since been confirmed on
+    the radio itself: a generated file carrying them imports and works
+    with no issues. Do not tighten this back up on suspicion.
   - Total entry count over the profile's cap causes an outright import
     failure on the radio (not a partial import) -- so we refuse to
     generate rather than silently truncate.

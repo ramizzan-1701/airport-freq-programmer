@@ -88,8 +88,8 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: AirportFreqProgrammer-windows
-          path: dist/AirportFreqProgrammer.exe
+          name: FTA850FrequencyManager-windows
+          path: dist/FTA850FrequencyManager.exe
           if-no-files-found: error
 
   build-macos:
@@ -153,10 +153,10 @@ jobs:
             echo "No .app bundle produced in dist/"; ls -la dist; exit 1
           fi
           echo "Found bundle: $APP_PATH"
-          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "dist/AirportFreqProgrammer-macos.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "dist/FTA850FrequencyManager-macos.zip"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: AirportFreqProgrammer-macos
-          path: dist/AirportFreqProgrammer-macos.zip
+          name: FTA850FrequencyManager-macos
+          path: dist/FTA850FrequencyManager-macos.zip
           if-no-files-found: error

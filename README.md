@@ -1,4 +1,4 @@
-# Airport Frequency Programmer
+# FTA-850 Frequency Manager
 
 Turns the FAA's 28-Day NASR aeronautical data into a radio-memory XML file for the
 **Yaesu FTA-850** (850L and 850AA), loadable through Yaesu's YCE-46 programming software.
@@ -68,8 +68,8 @@ the install location so it survives replacing the app:
 
 | Platform | Path |
 | --- | --- |
-| Windows | `%LOCALAPPDATA%\afp\AirportFreqProgrammer` |
-| macOS | `~/Library/Application Support/AirportFreqProgrammer` |
+| Windows | `%LOCALAPPDATA%\afp\FTA850FrequencyManager` |
+| macOS | `~/Library/Application Support/FTA850FrequencyManager` |
 
 `afp serve` and `afp query` keep using `./nasr_cache` relative to where you run them,
 which is the more convenient behaviour inside a checkout.
@@ -79,7 +79,7 @@ which is the more convenient behaviour inside a checkout.
 Each platform's bundle must be built on that platform — neither toolchain cross-compiles.
 This is why CI builds both on their respective runners.
 
-**Windows** (produces `dist/AirportFreqProgrammer.exe`):
+**Windows** (produces `dist/FTA850FrequencyManager.exe`):
 
 ```bash
 pip install -e ".[build-windows]"

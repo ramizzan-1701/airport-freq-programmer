@@ -17,9 +17,13 @@ from pathlib import Path
 
 from platformdirs import user_data_dir
 
-# Kept deliberately separate from the "Airport Frequency Programmer"
-# display name: this string becomes a real on-disk path, and a stable,
-# space-free one survives renames of the user-facing title.
+# Deliberately not the display name, and deliberately unchanged when that
+# name changes: this string is a real on-disk path. The app was renamed to
+# "FTA-850 Frequency Manager" and this stayed put, because renaming it
+# would point a running install at an empty directory -- orphaning the
+# downloaded NASR cycles (tens of MB per cycle), the imported custom
+# entries, and both acknowledgment flags, with no error to explain where
+# they went. Changing it later means writing a migration, not an edit.
 APP_NAME = "AirportFreqProgrammer"
 APP_AUTHOR = "afp"
 

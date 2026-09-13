@@ -17,7 +17,7 @@ from afp.web.app import STATIC_DIR
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ICONS_DIR = REPO_ROOT / "packaging" / "icons"
 ICO_PATH = ICONS_DIR / "app.ico"
-ICONSET = ICONS_DIR / "AirportFreqProgrammer.iconset"
+ICONSET = ICONS_DIR / "FTA850FrequencyManager.iconset"
 
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
@@ -141,7 +141,7 @@ def test_ci_uploads_the_single_exe():
     upload_paths = [
         line.strip() for line in windows_job.splitlines() if line.strip().startswith("path:")
     ]
-    assert upload_paths == ["path: dist/AirportFreqProgrammer.exe"], upload_paths
+    assert upload_paths == ["path: dist/FTA850FrequencyManager.exe"], upload_paths
 
 
 def test_ci_compiles_its_own_pyinstaller_bootloader():

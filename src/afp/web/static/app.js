@@ -1514,7 +1514,7 @@ async function showAboutModal({ firstRun = false } = {}) {
   let page = 1;
 
   box.innerHTML = "";
-  box.appendChild(modalHeader("FTA-850 Frequency Programmer"));
+  box.appendChild(modalHeader("FTA-850 Frequency Manager"));
 
   // modal-scroll is what sits between the pinned header and footer.
   const body = document.createElement("div");

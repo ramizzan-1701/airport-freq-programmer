@@ -25,8 +25,8 @@ from pathlib import Path
 from setuptools import Distribution, setup
 
 HERE = Path(__file__).parent
-ICONSET = HERE / "icons" / "AirportFreqProgrammer.iconset"
-ICNS = HERE / "icons" / "AirportFreqProgrammer.icns"
+ICONSET = HERE / "icons" / "FTA850FrequencyManager.iconset"
+ICNS = HERE / "icons" / "FTA850FrequencyManager.icns"
 
 
 def build_icns() -> str:
@@ -118,8 +118,8 @@ OPTIONS = {
     ],
     "excludes": ["tkinter", "pytest"],
     "plist": {
-        "CFBundleName": "Airport Frequency Programmer",
-        "CFBundleDisplayName": "Airport Frequency Programmer",
+        "CFBundleName": "FTA-850 Frequency Manager",
+        "CFBundleDisplayName": "FTA-850 Frequency Manager",
         "CFBundleIdentifier": "com.github.ramizzan-1701.airport-freq-programmer",
         "CFBundleVersion": "0.8.0",
         "CFBundleShortVersionString": "0.8.0",
@@ -132,7 +132,7 @@ OPTIONS = {
 }
 
 setup(
-    name="AirportFreqProgrammer",
+    name="FTA850FrequencyManager",
     app=APP,
     data_files=DATA_FILES,
     options={"py2app": OPTIONS},

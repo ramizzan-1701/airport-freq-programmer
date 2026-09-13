@@ -20,7 +20,7 @@ import webview
 from .paths import default_cache_dir
 from .web import create_app
 
-WINDOW_TITLE = "Airport Frequency Programmer"
+WINDOW_TITLE = "FTA-850 Frequency Manager"
 _STARTUP_TIMEOUT_S = 30.0
 
 # The size the UI was composed at. The layout tolerates larger -- the
