@@ -1267,18 +1267,10 @@ function openCustomEntriesModal() {
   }
   table.appendChild(tbody);
 
-  // Both only make sense alongside actual rows: a bare header row reads
-  // as a broken table, and the note below refers to "the list above".
+  // Only alongside actual rows -- a bare header row reads as a broken
+  // table.
   if (customEntries.length > 0) {
     scroll.appendChild(table);
-
-    // Stays with the list rather than in the pinned footer -- it
-    // annotates the entries, and permanently occupying footer space
-    // would cost more than it's worth.
-    const note = document.createElement("p");
-    note.className = "modal-note";
-    note.textContent = "Note: placing a custom entry into one of the 6 fixed group names above will cause it to be discarded on the next import, since the app can't tell it apart from its own regenerated entries.";
-    scroll.appendChild(note);
   }
   box.appendChild(scroll);
 
