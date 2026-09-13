@@ -52,6 +52,37 @@ jobs:
       - name: Install package and PyInstaller
         run: pip install -e ".[build-windows]"
 
+      # Defender scores the stock bootloader itself as
+      # Trojan:Win32/Wacatac.B!ml -- the small C launcher every
+      # PyInstaller app on Windows shares, which vendors have seen in
+      # enough real malware to flag on sight. Switching this build from
+      # onefile to onedir did not help, which ruled out the
+      # self-extraction behaviour and left the binary itself.
+      #
+      # Compiling it here produces a launcher that is not the one in
+      # their heuristics. The runner already has the MSVC toolchain, so
+      # this needs no extra setup -- just the source distribution instead
+      # of the wheel.
+      - name: Rebuild the PyInstaller bootloader from source
+        shell: bash
+        run: |
+          pip install --no-binary pyinstaller --force-reinstall --no-cache-dir "pyinstaller>=6.0" 2>&1 | tee install.log
+          # pip falls back to a wheel silently if the source build is
+          # unavailable, which would leave the stock bootloader in place
+          # and this whole step doing nothing.
+          grep -q "Building wheel for pyinstaller" install.log || { echo "::error::PyInstaller came from a wheel -- bootloader NOT rebuilt"; exit 1; }
+
+      - name: Record the bootloader's identity
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib, pathlib, PyInstaller
+          root = pathlib.Path(PyInstaller.__file__).parent / "bootloader"
+          for exe in sorted(root.rglob("*.exe")):
+              digest = hashlib.sha256(exe.read_bytes()).hexdigest()
+              print(f"{exe.relative_to(root)}  {digest}  {exe.stat().st_size:,} bytes")
+          PY
+
       - name: Build
         run: pyinstaller --noconfirm --clean packaging/afp.spec
 

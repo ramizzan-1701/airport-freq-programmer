@@ -150,6 +150,28 @@ def test_ci_uploads_the_whole_app_folder():
     )
 
 
+def test_ci_compiles_its_own_pyinstaller_bootloader():
+    """Defender scores the stock bootloader as Wacatac.B!ml -- the C
+    launcher every PyInstaller app on Windows shares, seen in enough real
+    malware to be flagged on sight. Going onedir did not help, which
+    ruled out the self-extraction behaviour and left the binary itself.
+
+    Building it on the runner yields a launcher that is not the one in
+    their heuristics. Dropping back to the wheel would silently restore
+    the flagged binary, so the step is pinned here.
+    """
+    workflow = (REPO_ROOT / ".github" / "workflows" / "build-desktop.yml").read_text(encoding="utf-8")
+    windows_job = workflow.split("build-windows:", 1)[1].split("build-macos:", 1)[0]
+    assert "--no-binary pyinstaller" in windows_job, (
+        "the Windows job installs PyInstaller as a wheel again"
+    )
+    # pip falls back to a wheel without failing, so the step checks the
+    # build actually happened rather than trusting the flag.
+    assert "Building wheel for pyinstaller" in windows_job, (
+        "nothing verifies the bootloader was really compiled from source"
+    )
+
+
 # ---------- macOS ----------
 
 
