@@ -124,20 +124,27 @@ body {
    findable without competing with the label it belongs to. */
 .help-dot {
   flex: none;
-  width: 14px;
-  height: 14px;
-  padding: 0;
+  width: 15px;
+  height: 15px;
+  /* 1px of top padding moves the flex-centred glyph down half a pixel,
+     which is exactly how far the ink of a lowercase "i" sits above the
+     box centre. Measured off the glyph's own bounding box rather than
+     nudged by eye, and it comes out at 0.5px for every size tried. */
+  padding: 1px 0 0;
   border: 1px solid var(--ink3);
   border-radius: 50%;
   background: none;
   color: var(--ink3);
-  font-family: var(--font-display);
+  /* Mono rather than the display face. Chakra Petch's lowercase "i" is a
+     2.6px stem at this size with the dot sitting right on top of it, so
+     it reads as a circle with a line through it. Plex Mono's is 6px wide
+     with a clear gap under the dot and a foot serif, which is what makes
+     it legible as an "i" at 15px. */
+  font-family: var(--font-mono);
   font-weight: 700;
-  font-size: 9.5px;
+  font-size: 10px;
   line-height: 1;
   cursor: pointer;
-  /* The glyph is a lowercase i -- centring it optically needs the flex
-     box, since its ascender leaves the line box unbalanced. */
   display: inline-flex;
   align-items: center;
   justify-content: center;
