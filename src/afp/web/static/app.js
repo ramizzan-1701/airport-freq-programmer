@@ -70,6 +70,42 @@ function tip(el, text) {
   return el;
 }
 
+// Set by initTooltips: show/hide for the click-triggered icons, which
+// need to drive the same single tooltip element the hover targets use.
+let tooltip = null;
+
+/** A small "i" that reveals `text` when clicked.
+ *
+ * A real button, not a styled span: it has to be tabbable and announce
+ * itself. Sits to the right of the title it explains.
+ */
+function helpIcon(text, describes) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "help-dot";
+  button.textContent = "i";
+  button.setAttribute("data-tip", text);
+  button.setAttribute("data-tip-trigger", "click");
+  button.setAttribute("aria-label", `About ${describes}`);
+  button.setAttribute("aria-expanded", "false");
+
+  const sync = () => button.setAttribute("aria-expanded", String(tooltip.isOpenFor(button)));
+
+  button.addEventListener("click", (event) => {
+    // These sit inside the group header, whose own click toggles the
+    // accordion -- left to bubble, asking what a filter does would
+    // collapse it.
+    event.stopPropagation();
+    tooltip.toggle(button);
+    sync();
+  });
+  button.addEventListener("keydown", (event) => {
+    // Same for the header's Enter/Space handler.
+    if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+  });
+  return button;
+}
+
 function initTooltips() {
   const tip = document.createElement("div");
   tip.id = "tooltip";
@@ -123,18 +159,53 @@ function initTooltips() {
     tip.hidden = true;
   }
 
+  // Two kinds of target share this one tooltip element.
+  //
+  // Hover targets are passive: a breakdown chip whose short label hides
+  // the full one, where the tip *is* the data and reaching for it is not
+  // something anyone does deliberately.
+  //
+  // Click targets are the help icons. Those explain a control you are
+  // about to click for another reason, so hovering them would put the
+  // tip in the way of the thing you were aiming at -- and the longer
+  // ones cannot be read on hover at all, since moving the pointer down
+  // to them fires mouseout and dismisses them.
+  const isClickTriggered = (el) => el.dataset.tipTrigger === "click";
+
+  tooltip = {
+    toggle(target) {
+      if (current === target) hide();
+      else show(target);
+      return current === target;
+    },
+    hide,
+    isOpenFor: (target) => current === target,
+  };
+
   document.addEventListener("mouseover", (event) => {
     const target = event.target.closest("[data-tip]");
-    if (target && target !== current) show(target);
+    if (target && target !== current && !isClickTriggered(target)) show(target);
   });
   document.addEventListener("mouseout", (event) => {
-    if (current && !current.contains(event.relatedTarget)) hide();
+    if (!current || isClickTriggered(current)) return;
+    if (!current.contains(event.relatedTarget)) hide();
   });
   document.addEventListener("focusin", (event) => {
     const target = event.target.closest("[data-tip]");
-    if (target) show(target);
+    if (target && !isClickTriggered(target)) show(target);
   });
-  document.addEventListener("focusout", hide);
+  document.addEventListener("focusout", (event) => {
+    // A click-opened tip stays until dismissed; tabbing away from the
+    // icon is a dismissal, moving the mouse is not.
+    if (current && isClickTriggered(current) && event.target !== current) return;
+    hide();
+  });
+  // Anywhere else on the page dismisses a pinned tip.
+  document.addEventListener("click", (event) => {
+    if (!current || !isClickTriggered(current)) return;
+    if (event.target.closest("[data-tip-trigger='click']") === current) return;
+    hide();
+  });
   // Anything that moves the page out from under a tooltip should dismiss
   // it rather than leave it floating over unrelated content.
   document.addEventListener("keydown", (event) => { if (event.key === "Escape") hide(); });
@@ -560,11 +631,8 @@ function accordionGroup(container, { key, title, summary, help, actions, buildBo
   main.className = "filter-group-main";
   const titleEl = document.createElement("div");
   titleEl.className = "filter-group-title";
-  titleEl.textContent = title;
-  // On the title rather than the whole header: the header is the click
-  // target for the accordion, and a tooltip covering all of it would
-  // follow the pointer everywhere on the way to opening the group.
-  if (help) tip(titleEl, help);
+  titleEl.append(document.createTextNode(title));
+  if (help) titleEl.appendChild(helpIcon(help, title));
   const summaryEl = document.createElement("div");
   summaryEl.className = "filter-group-summary";
   summaryEl.textContent = summary;
@@ -876,11 +944,13 @@ function renderNonSiteToggle(container) {
     selected.includeNonSiteFacilities = checked;
     scheduleQuery();
   });
-  // The why lives in a tooltip rather than three lines of prose above
-  // the control: the label already says what the checkbox does, and the
-  // reasoning is only wanted the first time.
-  tip(row.querySelector("label"),
-    "Site Type and Facility Status only apply to airports. Non-site facilities (VOR, RCAG, TRACON, etc.) have neither, so narrowing either filter would otherwise exclude them entirely.");
+  // Appended to the row rather than the label: a button inside a <label>
+  // activates the label's control, so asking what this does would also
+  // tick the box.
+  row.appendChild(helpIcon(
+    "Site Type and Facility Status only apply to airports. Non-site facilities (VOR, RCAG, TRACON, etc.) have neither, so narrowing either filter would otherwise exclude them entirely.",
+    "Retain non-site facilities",
+  ));
   wrap.appendChild(list);
   container.appendChild(wrap);
 }
@@ -1012,8 +1082,7 @@ function renderIlsSubFilters(container) {
     label.className = "subfilter-label";
     const labelText = document.createElement("span");
     labelText.textContent = spec.title;
-    tip(labelText, SUB_TIP);
-    label.appendChild(labelText);
+    label.append(labelText, helpIcon(SUB_TIP, spec.title));
     const badge = document.createElement("span");
     badge.className = "count-badge";
     badge.textContent = spec.selectedSet.size > 0 ? `${spec.selectedSet.size} selected` : "";
