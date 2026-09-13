@@ -68,27 +68,31 @@ a = Analysis(
 
 pyz = PYZ(a.pure)
 
-# onedir, not onefile. A onefile .exe carries the runtime, every DLL and
-# all the web assets inside itself and unpacks them to a temp directory
-# at launch -- and unpack-then-execute is what a dropper does, so
-# Defender's ML model scored a CI-built one as Trojan:Win32/Wacatac.B!ml
-# (a heuristic verdict, not a signature match; the same binary built
-# locally scanned clean). Being unsigned removes the one signal that
-# would offset it.
+# onefile: everything in one .exe, which unpacks itself to a temp
+# directory at launch.
 #
-# Splitting the runtime back out removes that behaviour entirely. The
-# cost is a folder instead of a single file, which is nearly free here:
-# the artifact was already a .zip that had to be unzipped either way.
+# This was briefly onedir, to escape Defender scoring the download as
+# Trojan:Win32/Wacatac.B!ml. That did not help -- the detection followed
+# the onedir build too, which ruled out the self-extraction behaviour and
+# pointed at the bootloader binary itself. Compiling that on the runner
+# (see the workflow) is what actually cleared it, and that fix is
+# independent of how the app is laid out.
+#
+# What onedir cost was real: the .exe cannot run without the _internal
+# folder beside it, so opening it straight from inside a zip viewer --
+# which extracts only the file you clicked -- fails.
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.datas,
     [],
-    exclude_binaries=True,
     name="AirportFreqProgrammer",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
+    runtime_tmpdir=None,
     # No console window behind the app -- this is a GUI, and a stray
     # terminal reads as a crash to a non-technical user.
     console=False,
@@ -105,12 +109,3 @@ exe = EXE(
     icon=str(ICON_ICO),
 )
 
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=False,
-    upx_exclude=[],
-    name="AirportFreqProgrammer",
-)
