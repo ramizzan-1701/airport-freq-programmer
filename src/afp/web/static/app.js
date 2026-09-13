@@ -681,9 +681,9 @@ function renderFiltersInner() {
     title: "Data interpretation",
     summary: selected.mode === "smart" ? "Smart" : "Raw",
     help:
-      "Smart keeps one entry where several do the same job: Tower over CTAF, " +
-      "ATIS over ASOS over AWOS, one localizer per runway end. Raw keeps every " +
-      "matching row.",
+      "Smart shows one entry when several do the same job at a single airport: " +
+      "Tower over CTAF, ATIS over AWOS, one localizer per runway end. " +
+      "Raw shows all registered frequencies.",
     buildBody(body) {
       const list = document.createElement("div");
       list.className = "multiselect-list";
