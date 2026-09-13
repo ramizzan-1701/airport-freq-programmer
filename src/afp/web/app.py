@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
+from pydantic import ValidationError
 
 from .. import RELEASE_DATE, __version__, about as about_copy, classification
 from ..counter import counter_status
@@ -120,6 +121,32 @@ def create_app(cache_dir: Path) -> FastAPI:
             app_version=__version__,
             release_date=RELEASE_DATE,
         )
+
+    @app.get("/api/filters", response_model=FilterStateIn)
+    def saved_filters() -> FilterStateIn:
+        """The filter selections from the last session.
+
+        Typed as FilterStateIn, the same shape /api/query takes, so
+        anything restored here is by construction something the query
+        accepts. With nothing saved this is a default-constructed one,
+        which is exactly "no filters" -- the rail's own starting state.
+        """
+        state: AppState = app.state.afp_state
+        saved = state.load_saved_filters()
+        if not saved:
+            return FilterStateIn()
+        try:
+            return FilterStateIn(**saved)
+        except ValidationError:
+            # Written by an older version whose shape has since changed.
+            # Starting clean beats refusing to open the rail.
+            return FilterStateIn()
+
+    @app.put("/api/filters", response_model=FilterStateIn)
+    def save_filters(body: FilterStateIn) -> FilterStateIn:
+        state: AppState = app.state.afp_state
+        state.save_filters(body.model_dump(mode="json"))
+        return body
 
     @app.get("/api/check-update", response_model=UpdateCheckOut)
     def check_update() -> UpdateCheckOut:

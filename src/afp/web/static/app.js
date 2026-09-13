@@ -313,9 +313,93 @@ async function doFetch() {
 
 async function initWorkspace() {
   filterOptions = await (await api("/api/filter-options")).json();
+  // Before the first render, so the rail draws the restored selections
+  // rather than drawing empty and repainting.
+  await restoreSavedFilters();
+  if (selected.states.size) await refreshCityOptions();
   renderFilters();
   await loadCustomEntries();
   await runQuery();
+}
+
+// ---------- saved filter selections ----------
+//
+// Held server-side beside the custom entries and the two acknowledgment
+// flags, not in localStorage: same lifetime as the rest of the app's
+// state, and it survives a cleared webview store.
+
+/** Codes currently on offer, from either shape the options API uses --
+ * bare strings, or {code, label} objects. */
+function optionCodes(options) {
+  return new Set((options || []).map((o) => (typeof o === "string" ? o : o.code)));
+}
+
+/** Restores what still applies, and quietly drops what doesn't.
+ *
+ * A selection the current cycle no longer offers has no checkbox to
+ * un-tick, so keeping it would filter everything out with nothing on
+ * screen explaining why.
+ */
+async function restoreSavedFilters() {
+  let saved;
+  try {
+    saved = await (await api("/api/filters")).json();
+  } catch {
+    return; // nothing saved, or unreadable -- the rail's defaults stand
+  }
+
+  const restore = (target, values, offered) => {
+    target.clear();
+    for (const value of values || []) {
+      if (!offered || offered.has(value)) target.add(value);
+    }
+  };
+
+  restore(selected.states, saved.states, optionCodes(filterOptions.states));
+  // Cities are scoped to the selected states and fetched separately, so
+  // they are pruned by refreshCityOptions rather than here.
+  restore(selected.cities, saved.cities, null);
+  restore(selected.freqCategories, saved.freq_categories, optionCodes(filterOptions.freq_categories));
+  restore(selected.platformTypes, saved.platform_types, optionCodes(filterOptions.platform_types));
+  restore(selected.facilityStatuses, saved.facility_statuses, optionCodes(filterOptions.facility_statuses));
+  restore(selected.ilsStatuses, saved.ils_component_statuses, optionCodes(filterOptions.ils_component_statuses));
+  restore(selected.ilsSystemTypes, saved.ils_system_types, optionCodes(filterOptions.ils_system_types));
+
+  selected.includeNonSiteFacilities = saved.include_non_site_facilities === true;
+  selected.includePublic = saved.include_public !== false;
+  selected.includePrivate = saved.include_private === true;
+  selected.mode = saved.mode === "raw" ? "raw" : "smart";
+  selected.radiusFilters = await resolvableRadiusFilters(saved.radius_filters);
+}
+
+/** Drops radius filters whose centre the loaded cycle cannot resolve.
+ *
+ * This one matters more than the others: an unknown centre does not
+ * narrow the results, it fails the whole query with a 400, so the rail
+ * would come up reading "Query failed" on every keystroke with no
+ * indication that a saved filter was the cause.
+ */
+async function resolvableRadiusFilters(saved) {
+  const kept = [];
+  for (const rf of saved || []) {
+    if (!rf || !rf.center) continue;
+    try {
+      const res = await api(`/api/resolve-center?center=${encodeURIComponent(rf.center)}`);
+      if (res.ok) kept.push({ center: rf.center, radius_nm: rf.radius_nm, mode: rf.mode });
+    } catch {
+      // Offline or mid-reload: leaving it out is the safe direction.
+    }
+  }
+  return kept;
+}
+
+function persistFilters(payload) {
+  // Fire and forget. A failed write costs the next session its restore,
+  // which is not worth interrupting the query for.
+  api("/api/filters", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  }).catch(() => {});
 }
 
 // Small "Select all" / "Clear" text buttons for a filter group's header
@@ -1856,7 +1940,12 @@ function confirmGroupSetupBeforeGenerate() {
 const scheduleQuery = debounce(runQuery, 200);
 
 async function runQuery() {
-  const res = await api("/api/query", { method: "POST", body: JSON.stringify(buildFilterPayload()) });
+  const payload = buildFilterPayload();
+  // Every filter change funnels through here, so this is the one place
+  // that has to remember them -- including "Clear all", which calls
+  // runQuery directly rather than through the debounce.
+  persistFilters(payload);
+  const res = await api("/api/query", { method: "POST", body: JSON.stringify(payload) });
   if (!res.ok) {
     document.getElementById("counter").textContent = "Query failed -- adjust filters and try again.";
     return;

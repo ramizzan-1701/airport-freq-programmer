@@ -51,3 +51,24 @@ def load_about_acknowledged(path: Path) -> bool:
 def save_about_acknowledged(path: Path, acknowledged: bool) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"acknowledged": acknowledged}), encoding="utf-8")
+
+
+def load_filters(path: Path) -> dict | None:
+    """The filter selections saved from the last session, or None if
+    nothing has been saved yet.
+
+    Returns None rather than {} for an unreadable file too: a corrupt one
+    should leave the rail at its defaults, not stop the app opening.
+    """
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def save_filters(path: Path, filters: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(filters), encoding="utf-8")

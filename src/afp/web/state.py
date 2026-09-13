@@ -40,6 +40,7 @@ class AppState:
         self.custom_entries_path = self.cache_dir / "custom_entries.json"
         self.group_setup_path = self.cache_dir / "group_setup.json"
         self.about_path = self.cache_dir / "about.json"
+        self.filters_path = self.cache_dir / "filters.json"
         self.custom_entries: list[Entry] = local_store.load_custom_entries(self.custom_entries_path)
         self.group_setup_acknowledged: bool = local_store.load_group_setup_acknowledged(self.group_setup_path)
         # False on a fresh install, which is what makes the About screen
@@ -102,6 +103,16 @@ class AppState:
     def acknowledge_group_setup(self) -> None:
         self.group_setup_acknowledged = True
         local_store.save_group_setup_acknowledged(self.group_setup_path, True)
+
+    def load_saved_filters(self) -> dict | None:
+        """Read from disk each time rather than caching in memory: the
+        rail writes far more often than it reads, and a stale copy here
+        would be a second source of truth for no gain.
+        """
+        return local_store.load_filters(self.filters_path)
+
+    def save_filters(self, filters: dict) -> None:
+        local_store.save_filters(self.filters_path, filters)
 
     def acknowledge_about(self) -> None:
         self.about_acknowledged = True
