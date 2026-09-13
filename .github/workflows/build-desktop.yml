@@ -89,7 +89,8 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: FTA850FrequencyManager-windows
-          path: dist/FTA850FrequencyManager.exe
+          # Quoted: the executable's name has spaces in it on purpose.
+          path: "dist/FTA-850 Frequency Manager.exe"
           if-no-files-found: error
 
   build-macos:

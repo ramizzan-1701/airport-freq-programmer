@@ -98,9 +98,10 @@ def test_the_version_is_written_down_in_exactly_one_place():
     """
     version = afp.__version__
     written = []
-    for path in sorted((REPO_ROOT / "src").rglob("*.py")) + sorted(
-        (REPO_ROOT / "packaging").rglob("*.py")
-    ):
+    candidates = sorted((REPO_ROOT / "src").rglob("*.py"))
+    candidates += sorted((REPO_ROOT / "packaging").rglob("*.py"))
+    candidates += sorted((REPO_ROOT / "packaging").rglob("*.spec"))
+    for path in candidates:
         if f'"{version}"' in path.read_text(encoding="utf-8"):
             written.append(path.relative_to(REPO_ROOT).as_posix())
 
@@ -113,10 +114,13 @@ def test_the_mac_bundle_takes_its_version_from_the_package():
     setup_py = (REPO_ROOT / "packaging" / "py2app_setup.py").read_text(encoding="utf-8")
     assert '"CFBundleVersion": VERSION' in setup_py
     assert '"CFBundleShortVersionString": VERSION' in setup_py
-    # Parsed, not imported: the setup script runs before anything is
+    assert "VERSION = _appinfo.package_version()" in setup_py
+
+    # Parsed, not imported: these scripts run before anything is
     # guaranteed importable, and importing the package to read one string
     # would run it.
-    assert "ast.parse" in setup_py
+    appinfo = (REPO_ROOT / "packaging" / "_appinfo.py").read_text(encoding="utf-8")
+    assert "ast.parse" in appinfo
 
 
 def test_the_creator_and_contact_address_are_shown(empty_client):

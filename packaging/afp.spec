@@ -18,14 +18,65 @@ Two things here are load-bearing and easy to lose in a "cleanup":
    cleanly and then dies on startup with an import error.
 """
 
+import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.win32.versioninfo import (
+    FixedFileInfo,
+    StringFileInfo,
+    StringStruct,
+    StringTable,
+    VarFileInfo,
+    VarStruct,
+    VSVersionInfo,
+)
 
 # SPECPATH is set by PyInstaller to this file's directory.
 REPO_ROOT = Path(SPECPATH).parent
 STATIC_SRC = REPO_ROOT / "src" / "afp" / "web" / "static"
 ICON_ICO = Path(SPECPATH) / "icons" / "app.ico"
+
+sys.path.insert(0, SPECPATH)
+import _appinfo  # noqa: E402  (needs SPECPATH on the path first)
+
+# The Windows version resource -- what Explorer's Details tab reads, and
+# what a signature would eventually be checked against.
+#
+# The .exe shipped without one, so Details was blank: no product, no
+# version, no author. That is a real gap for anyone inspecting a
+# downloaded binary, and blank metadata is one of the things an unsigned
+# executable is judged on. It is emphatically not a fix for the Defender
+# verdict -- two builds with identical bundled content have already been
+# scored differently -- but it is worth having on its own.
+#
+# Built here rather than loaded from a text file so the version comes
+# from the package and cannot drift from what the About screen shows.
+VERSION_RESOURCE = VSVersionInfo(
+    ffi=FixedFileInfo(
+        filevers=_appinfo.version_tuple(),
+        prodvers=_appinfo.version_tuple(),
+        mask=0x3F,
+        flags=0x0,
+        OS=0x40004,     # VOS_NT_WINDOWS32
+        fileType=0x1,   # VFT_APP
+        subtype=0x0,
+        date=(0, 0),
+    ),
+    kids=[
+        # 040904B0: US English, Unicode.
+        StringFileInfo([StringTable("040904B0", [
+            StringStruct("CompanyName", _appinfo.author()),
+            StringStruct("FileDescription", _appinfo.APP_DISPLAY_NAME),
+            StringStruct("FileVersion", _appinfo.package_version()),
+            StringStruct("InternalName", _appinfo.APP_FILE_NAME),
+            StringStruct("OriginalFilename", f"{_appinfo.APP_DISPLAY_NAME}.exe"),
+            StringStruct("ProductName", _appinfo.APP_DISPLAY_NAME),
+            StringStruct("ProductVersion", _appinfo.package_version()),
+        ])]),
+        VarFileInfo([VarStruct("Translation", [0x409, 1200])]),
+    ],
+)
 
 # pywebview loads its platform backend (EdgeChromium/WebView2 here)
 # dynamically and ships non-Python support files, so collect it wholesale
@@ -87,7 +138,9 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="FTA850FrequencyManager",
+    # Spaces, not camel case: this is the filename someone is handed and
+    # double-clicks, so it reads as a product rather than an identifier.
+    name=_appinfo.APP_DISPLAY_NAME,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -107,5 +160,6 @@ exe = EXE(
     # RT_ICON resources, which is what Explorer, the taskbar and the
     # window's own title bar all read.
     icon=str(ICON_ICO),
+    version=VERSION_RESOURCE,
 )
 
