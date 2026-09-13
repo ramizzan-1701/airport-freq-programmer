@@ -1390,7 +1390,7 @@ function appendGroupSetupInstructions(box) {
   const step1Text = document.createElement("div");
   step1Text.append(
     document.createTextNode("Open the YCE-46 editor. Go to: "),
-    Object.assign(document.createElement("b"), { textContent: "Setup -> Memory Group Name" }),
+    Object.assign(document.createElement("b"), { textContent: "Memory Book → Memory Group Name" }),
     document.createTextNode("."),
   );
   step1.appendChild(step1Text);

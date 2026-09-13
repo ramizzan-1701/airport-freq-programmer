@@ -204,6 +204,30 @@ def test_the_workflow_actions_reach_the_frontend(empty_client):
     assert actions == {"GROUPS SETUP HELP": "group-setup"}
 
 
+def test_the_group_setup_modal_names_the_same_menu_as_the_workflow():
+    """Two screens describe the same YCE-46 menu: workflow step 2 and the
+    group-setup modal step 1. They drifted once already -- the modal was
+    still saying "Setup" after the workflow moved to "Memory Book" --
+    and a reader following stale directions finds nothing there.
+    """
+    menu = "Memory Book → Memory Group Name"
+    assert any(menu in step for step in about.WORKFLOW_STEPS), (
+        "no workflow step names this menu any more"
+    )
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    assert menu in app_js, "the group-setup modal names a different menu than the workflow"
+
+
+def test_the_group_setup_modal_uses_the_arrow_glyph():
+    """Same convention as the workflow steps: the app writes menu paths
+    with the arrow character, not "->".
+    """
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    start = app_js.index("function appendGroupSetupInstructions")
+    instructions = app_js[start : app_js.index("\nfunction ", start + 1)]
+    assert "->" not in instructions, "an ASCII arrow crept into the group-setup instructions"
+
+
 def test_the_group_setup_modal_stacks_above_the_about_one():
     """Step 2's link opens the group-setup modal over this one, so the
     reader keeps their place in the workflow. Both backdrops share a
