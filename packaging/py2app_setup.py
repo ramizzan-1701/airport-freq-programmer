@@ -121,8 +121,8 @@ OPTIONS = {
         "CFBundleName": "Airport Frequency Programmer",
         "CFBundleDisplayName": "Airport Frequency Programmer",
         "CFBundleIdentifier": "com.github.ramizzan-1701.airport-freq-programmer",
-        "CFBundleVersion": "0.1.0",
-        "CFBundleShortVersionString": "0.1.0",
+        "CFBundleVersion": "0.8.0",
+        "CFBundleShortVersionString": "0.8.0",
         "NSHighResolutionCapable": True,
         # The window loads its UI from the app's own uvicorn server over
         # plain HTTP on 127.0.0.1; without this exception App Transport
