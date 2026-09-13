@@ -86,6 +86,39 @@ def test_pyproject_takes_its_version_from_the_package():
     assert 'version = {attr = "afp.__version__"}' in pyproject
 
 
+def test_the_version_is_written_down_in_exactly_one_place():
+    """The number the About screen shows, the wheel metadata and the
+    macOS bundle all have to agree, and the only way that stays true is
+    if there is one literal to change.
+
+    This caught real drift twice: py2app's plist carried its own copy and
+    had to be edited alongside, so Finder's Get Info reported one version
+    while the About screen reported another for as long as it took to
+    notice.
+    """
+    version = afp.__version__
+    written = []
+    for path in sorted((REPO_ROOT / "src").rglob("*.py")) + sorted(
+        (REPO_ROOT / "packaging").rglob("*.py")
+    ):
+        if f'"{version}"' in path.read_text(encoding="utf-8"):
+            written.append(path.relative_to(REPO_ROOT).as_posix())
+
+    assert written == ["src/afp/__init__.py"], (
+        f"{version!r} is hard-coded in more than one place: {written}"
+    )
+
+
+def test_the_mac_bundle_takes_its_version_from_the_package():
+    setup_py = (REPO_ROOT / "packaging" / "py2app_setup.py").read_text(encoding="utf-8")
+    assert '"CFBundleVersion": VERSION' in setup_py
+    assert '"CFBundleShortVersionString": VERSION' in setup_py
+    # Parsed, not imported: the setup script runs before anything is
+    # guaranteed importable, and importing the package to read one string
+    # would run it.
+    assert "ast.parse" in setup_py
+
+
 def test_the_creator_and_contact_address_are_shown(empty_client):
     body = empty_client.get("/api/about").json()
     assert body["author"] == "Ryan Ramirez"

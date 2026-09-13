@@ -18,6 +18,7 @@ The built app is unsigned: Gatekeeper blocks it on first open until the
 user right-click > Open, or it's signed with a paid Apple Developer ID.
 """
 
+import ast
 import subprocess
 import sys
 from pathlib import Path
@@ -27,6 +28,32 @@ from setuptools import Distribution, setup
 HERE = Path(__file__).parent
 ICONSET = HERE / "icons" / "FTA850FrequencyManager.iconset"
 ICNS = HERE / "icons" / "FTA850FrequencyManager.icns"
+PACKAGE_INIT = HERE.parent / "src" / "afp" / "__init__.py"
+
+
+def package_version() -> str:
+    """__version__, read out of the package source.
+
+    Parsed rather than imported. This script runs as __main__ from the
+    repo root with whatever happens to be installed, and a packaging
+    script has no business importing the package it is packaging just to
+    read one string -- parsing needs nothing on sys.path and cannot run
+    anything.
+
+    The alternative, which this replaced, was typing the number here as
+    well: Finder's Get Info then reported a different version from the
+    one the About screen showed, for as long as it took to notice.
+    """
+    for node in ast.parse(PACKAGE_INIT.read_text(encoding="utf-8")).body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "__version__"
+            for target in node.targets
+        ):
+            return ast.literal_eval(node.value)
+    raise SystemExit(f"no __version__ found in {PACKAGE_INIT}")
+
+
+VERSION = package_version()
 
 
 def build_icns() -> str:
@@ -121,8 +148,8 @@ OPTIONS = {
         "CFBundleName": "FTA-850 Frequency Manager",
         "CFBundleDisplayName": "FTA-850 Frequency Manager",
         "CFBundleIdentifier": "com.github.ramizzan-1701.airport-freq-programmer",
-        "CFBundleVersion": "0.9.0",
-        "CFBundleShortVersionString": "0.9.0",
+        "CFBundleVersion": VERSION,
+        "CFBundleShortVersionString": VERSION,
         "NSHighResolutionCapable": True,
         # The window loads its UI from the app's own uvicorn server over
         # plain HTTP on 127.0.0.1; without this exception App Transport
