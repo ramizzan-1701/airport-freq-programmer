@@ -24,6 +24,7 @@ from ..nasr.source import FetchResult
 from ..query import query as query_mod
 from ..selection import FIXED_GROUP_NAMES, orphan_tag_ids, select_entries
 from .models import (
+    AboutActionOut,
     AboutFeatureOut,
     AboutLinkOut,
     AboutOut,
@@ -110,6 +111,10 @@ def create_app(cache_dir: Path) -> FastAPI:
             ],
             workflow_intro=about_copy.WORKFLOW_INTRO,
             workflow_steps=list(about_copy.WORKFLOW_STEPS),
+            workflow_actions=[
+                AboutActionOut(phrase=phrase, action=action)
+                for phrase, action in about_copy.WORKFLOW_ACTIONS
+            ],
             author=about_copy.AUTHOR,
             contact_email=about_copy.CONTACT_EMAIL,
             app_version=__version__,

@@ -105,6 +105,17 @@ class AboutLinkOut(BaseModel):
     url: str
 
 
+class AboutActionOut(BaseModel):
+    """A phrase in a workflow step that opens something in this app.
+
+    `action` names a handler the frontend maps to a function -- copy
+    cannot carry a callback, and a URL would be wrong for something that
+    never leaves the page.
+    """
+    phrase: str
+    action: str
+
+
 class AboutOut(BaseModel):
     intro: list[str]
     intro_links: list[AboutLinkOut]
@@ -112,6 +123,7 @@ class AboutOut(BaseModel):
     # Page 2. Steps carry **bold** markers, rendered by the frontend.
     workflow_intro: str
     workflow_steps: list[str]
+    workflow_actions: list[AboutActionOut]
     author: str
     contact_email: str
     app_version: str

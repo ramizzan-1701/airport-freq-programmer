@@ -875,7 +875,26 @@ main#app > .workspace,
   font-family: var(--font-display);
   font-weight: 700;
 }
-.about-workflow b { color: var(--ink); font-weight: 600; }
+/* Marked runs are menu paths to follow in YCE-46 -- bold and italic
+   together sets them apart from the prose telling you why. */
+.about-workflow b {
+  color: var(--ink);
+  font-weight: 600;
+  font-style: italic;
+}
+
+/* A phrase that opens something in this app. A real button, so it is
+   reachable by keyboard, painted to read as a link. */
+.about-workflow .text-link {
+  font: inherit;
+  color: var(--acc);
+  background: none;
+  border: 0;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.about-workflow .text-link:hover { color: var(--ink); }
 
 /* Page turn, pushed to the right of the footer's primary button. */
 .about-nav {

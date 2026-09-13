@@ -1627,7 +1627,7 @@ function appendAboutWorkflow(body) {
   ol.className = "about-workflow";
   for (const step of aboutCopy.workflow_steps) {
     const li = document.createElement("li");
-    appendBoldMarkedText(li, step);
+    appendWorkflowStep(li, step, aboutCopy.workflow_actions || []);
     ol.appendChild(li);
   }
   body.appendChild(ol);
@@ -1637,7 +1637,7 @@ function appendAboutWorkflow(body) {
  * The markers travel in the copy so the emphasis lives with the words
  * rather than being reconstructed from positions here.
  */
-function appendBoldMarkedText(el, text) {
+function appendWorkflowStep(el, text, actions) {
   const parts = text.split("**");
   parts.forEach((part, i) => {
     if (!part) return;
@@ -1647,9 +1647,47 @@ function appendBoldMarkedText(el, text) {
       b.textContent = part;
       el.appendChild(b);
     } else {
-      el.appendChild(document.createTextNode(part));
+      // Only the unmarked runs are scanned for actions: a phrase that
+      // is already emphasised is describing a YCE-46 menu, not naming
+      // something in this app.
+      appendActionText(el, part, actions);
     }
   });
+}
+
+/** What each action name in the copy actually opens. */
+const ABOUT_ACTIONS = {
+  "group-setup": showGroupSetupModal,
+};
+
+/** Appends `text`, turning any of `actions`' phrases into a button that
+ * opens the thing it names.
+ *
+ * A button rather than an anchor: it goes nowhere, and the group-setup
+ * modal opens over the About one -- it sits later in the document, so it
+ * stacks on top and closing it leaves the reader back on this step.
+ */
+function appendActionText(el, text, actions) {
+  let rest = text;
+  while (rest) {
+    let best = null;
+    for (const entry of actions) {
+      const at = rest.indexOf(entry.phrase);
+      if (at !== -1 && (best === null || at < best.at)) best = { at, entry };
+    }
+    const handler = best && ABOUT_ACTIONS[best.entry.action];
+    if (!best || !handler) break;
+
+    if (best.at > 0) el.appendChild(document.createTextNode(rest.slice(0, best.at)));
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "text-link";
+    button.textContent = best.entry.phrase;
+    button.addEventListener("click", handler);
+    el.appendChild(button);
+    rest = rest.slice(best.at + best.entry.phrase.length);
+  }
+  if (rest) el.appendChild(document.createTextNode(rest));
 }
 
 /** Appends `text` to `el`, turning any of `links`' phrases into anchors.

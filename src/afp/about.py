@@ -71,19 +71,28 @@ WORKFLOW_INTRO = (
 )
 
 WORKFLOW_STEPS: tuple[str, ...] = (
-    "Open YCE-46. Go to: **Setup → Memory Group Name.**",
-    "Rename 6 of the 9 Groups. (see GROUPS SETUP HELP in this app)",
-    "In YCE-46 editor: Go to **File → XML File → Save** to save your existing "
-    "frequency list from your radio.",
-    "Import this XML file into this app. It will import all your frequencies "
-    "saved to custom groups.",
+    "Open YCE-46. **Select: Transfer → Read From Radio.**",
+    "Select: **Memory Book → Memory Group Name.** Confirm 6 groups are "
+    "renamed. (see GROUPS SETUP HELP in this app)",
+    "In YCE-46 editor: Go to **File → XML File → Save** to save your "
+    "existing frequency list from your radio.",
+    "Import the saved XML file into this app. It will import all your "
+    "frequencies saved to custom groups.",
     "Filter for the frequencies you want to keep.",
-    "“Generate FTA-850 XML”. It will include the NASR frequencies in their "
-    "alphabetized groups AND the custom frequency groups you imported.",
-    "Go back to YCE-46 and select **File → XML File → Open.** Select the "
-    "generated XML file from this app.",
-    "Select **Transfer → Program to Radio** to upload the new frequencies to your "
-    "radio!",
+    "Select **Generate FTA-850 XML.** It will include your filtered frequencies "
+    "AND the custom frequency groups you imported.",
+    "Go back to YCE-46 and select **File → XML File → Open.** Select "
+    "the generated XML file from this app.",
+    "Select **Transfer → Program to Radio** to upload the new frequencies "
+    "to your radio!",
+)
+
+# Phrases in WORKFLOW_STEPS that open something in this app rather than
+# describing a menu in YCE-46. The second element names an action the
+# frontend knows how to run -- the copy can't hold a function, and a URL
+# would be wrong for something that never leaves the page.
+WORKFLOW_ACTIONS: tuple[tuple[str, str], ...] = (
+    ("GROUPS SETUP HELP", "group-setup"),
 )
 
 AUTHOR = "Ryan Ramirez"

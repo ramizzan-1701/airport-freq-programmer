@@ -163,6 +163,57 @@ def test_the_workflow_names_buttons_that_actually_exist():
         )
 
 
+def test_every_workflow_action_phrase_appears_in_a_step():
+    """An action is found by the phrase it wraps, so a phrase that no
+    longer occurs renders no link and raises nothing.
+    """
+    steps = " ".join(about.WORKFLOW_STEPS)
+    for phrase, _action in about.WORKFLOW_ACTIONS:
+        assert phrase in steps, f"no step contains {phrase!r}, so it would not link"
+
+
+def test_workflow_action_phrases_are_not_inside_a_bold_run():
+    """The renderer only scans unmarked runs for actions -- emphasis
+    means "a menu in YCE-46", so a phrase buried in one would never be
+    turned into a link.
+    """
+    for phrase, _action in about.WORKFLOW_ACTIONS:
+        for step in about.WORKFLOW_STEPS:
+            if phrase not in step:
+                continue
+            # Even indices are the runs outside the ** markers.
+            unmarked = step.split("**")[::2]
+            assert any(phrase in part for part in unmarked), (
+                f"{phrase!r} only appears inside a bold run in: {step!r}"
+            )
+
+
+def test_the_frontend_knows_every_action_the_copy_names():
+    """about.py names an action, app.js maps it to a function. A name
+    with no handler silently renders as plain text.
+    """
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    handlers = app_js.split("const ABOUT_ACTIONS = {", 1)[1].split("};", 1)[0]
+    for _phrase, action in about.WORKFLOW_ACTIONS:
+        assert f'"{action}"' in handlers, f"app.js has no handler for the {action!r} action"
+
+
+def test_the_workflow_actions_reach_the_frontend(empty_client):
+    body = empty_client.get("/api/about").json()
+    actions = {a["phrase"]: a["action"] for a in body["workflow_actions"]}
+    assert actions == {"GROUPS SETUP HELP": "group-setup"}
+
+
+def test_the_group_setup_modal_stacks_above_the_about_one():
+    """Step 2's link opens the group-setup modal over this one, so the
+    reader keeps their place in the workflow. Both backdrops share a
+    z-index, so the only thing deciding which wins is document order --
+    swap these two divs and the link would appear to do nothing.
+    """
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    assert html.index('id="about-modal"') < html.index('id="group-setup-modal"')
+
+
 def test_the_workflow_uses_the_arrow_glyph_not_an_ascii_arrow():
     """The app writes menu paths with the arrow character everywhere
     else; a stray "->" would read as a different convention.
