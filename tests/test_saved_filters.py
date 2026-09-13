@@ -176,6 +176,19 @@ def test_the_rail_drops_a_radius_centre_the_cycle_cannot_resolve():
     )
 
 
+def test_clear_all_resets_the_interpretation_mode():
+    """Raw now persists between sessions, so leaving it out of "Clear
+    all" would follow the user around for good -- with the one button
+    that promises to clear everything visibly not clearing it.
+    """
+    from afp.web.app import STATIC_DIR
+
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    start = app_js.index("function clearAllFilters()")
+    clear_all = app_js[start : app_js.index("\n}", start)]
+    assert 'selected.mode = "smart"' in clear_all
+
+
 def test_every_filter_change_funnels_through_the_save():
     """runQuery is the one place every change reaches, including "Clear
     all", which calls it directly rather than through the debounce.

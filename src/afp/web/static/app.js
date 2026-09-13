@@ -525,6 +525,10 @@ function clearAllFilters() {
   selected.radiusFilters = [];
   selected.includePublic = true;
   selected.includePrivate = false;
+  // Smart is the default the rail starts at, and it now persists between
+  // sessions -- left out of here, one switch to Raw would follow the user
+  // around for good, with "Clear all" visibly not clearing it.
+  selected.mode = "smart";
   freqCategoryAdvancedExpanded = false;
   renderFilters();
   runQuery();
@@ -538,7 +542,7 @@ function clearAllFilters() {
  * inside the rail's own scroll. A `max-height` on a list would bring
  * that straight back.
  */
-function accordionGroup(container, { key, title, summary, actions, buildBody }) {
+function accordionGroup(container, { key, title, summary, help, actions, buildBody }) {
   const isOpen = openGroup === key;
 
   const wrap = document.createElement("div");
@@ -557,6 +561,10 @@ function accordionGroup(container, { key, title, summary, actions, buildBody }) 
   const titleEl = document.createElement("div");
   titleEl.className = "filter-group-title";
   titleEl.textContent = title;
+  // On the title rather than the whole header: the header is the click
+  // target for the accordion, and a tooltip covering all of it would
+  // follow the pointer everywhere on the way to opening the group.
+  if (help) tip(titleEl, help);
   const summaryEl = document.createElement("div");
   summaryEl.className = "filter-group-summary";
   summaryEl.textContent = summary;
@@ -672,6 +680,10 @@ function renderFiltersInner() {
     key: "mode",
     title: "Data interpretation",
     summary: selected.mode === "smart" ? "Smart" : "Raw",
+    help:
+      "Smart keeps one entry where several do the same job: Tower over CTAF, " +
+      "ATIS over ASOS over AWOS, one localizer per runway end. Raw keeps every " +
+      "matching row.",
     buildBody(body) {
       const list = document.createElement("div");
       list.className = "multiselect-list";
