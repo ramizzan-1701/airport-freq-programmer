@@ -135,18 +135,34 @@ def test_the_windows_build_is_onefile():
     )
 
 
-def test_ci_uploads_the_single_exe_under_its_real_name():
-    """The executable's filename has spaces in it, so the upload path has
-    to match exactly -- a stale path fails the build rather than shipping
-    the wrong thing, but only because if-no-files-found is set to error.
+def test_ci_uploads_the_exe_under_its_real_name_with_the_readme():
+    """The executable's filename has spaces in it, so the upload pattern
+    has to match exactly -- a stale path fails the build rather than
+    shipping the wrong thing, but only because if-no-files-found is error.
+
+    The patterns sit in a block scalar, which is literal: quoting one
+    would put the quote characters into the glob and match nothing. That
+    is the trap in converting this from the single-path form, so the
+    assertion is on the unquoted name.
     """
     workflow = (REPO_ROOT / ".github" / "workflows" / "build-desktop.yml").read_text(encoding="utf-8")
     windows_job = workflow.split("build-windows:", 1)[1].split("build-macos:", 1)[0]
-    upload_paths = [
-        line.strip() for line in windows_job.splitlines() if line.strip().startswith("path:")
-    ]
-    assert upload_paths == ['path: "dist/FTA-850 Frequency Manager.exe"'], upload_paths
+    upload = windows_job.split("path: |", 1)[1].split("if-no-files-found", 1)[0]
+    patterns = [line.strip() for line in upload.splitlines() if line.strip()]
+    assert patterns == ["dist/FTA-850 Frequency Manager.exe", "dist/README.txt"], patterns
     assert "if-no-files-found: error" in windows_job
+
+
+def test_both_builds_ship_a_readme_beside_the_app():
+    """A download with no readme leaves the unsigned-binary warning
+    unexplained, which is the one thing every first-time user hits.
+    """
+    workflow = (REPO_ROOT / ".github" / "workflows" / "build-desktop.yml").read_text(encoding="utf-8")
+    for job, platform in (("build-windows:", "windows"), ("build-macos:", "macos")):
+        section = workflow.split(job, 1)[1]
+        assert f"make_readme.py --platform {platform} dist/README.txt" in section, (
+            f"{job} does not generate a readme"
+        )
 
 
 def test_ci_compiles_its_own_pyinstaller_bootloader():

@@ -22,13 +22,26 @@ PACKAGE_INIT = REPO_ROOT / "src" / "afp" / "__init__.py"
 ABOUT = REPO_ROOT / "src" / "afp" / "about.py"
 
 
-def read_constant(path: Path, name: str) -> str:
-    """The value of a module-level string constant, without importing."""
+def read_constant(path: Path, name: str):
+    """The value of a module-level constant, without importing.
+
+    Any literal ast.literal_eval accepts -- about.py's copy is tuples of
+    strings and of string pairs, not just the plain strings this started
+    out reading.
+
+    Both assignment forms, because about.py annotates its constants
+    (`NAME: tuple[str, ...] = (...)`) and __init__.py does not. An
+    annotated assignment is a different node type, so handling only the
+    plain one silently found nothing.
+    """
     for node in ast.parse(path.read_text(encoding="utf-8")).body:
-        if isinstance(node, ast.Assign) and any(
-            isinstance(target, ast.Name) and target.id == name
-            for target in node.targets
-        ):
+        if isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        elif isinstance(node, ast.Assign):
+            targets = node.targets
+        else:
+            continue
+        if any(isinstance(t, ast.Name) and t.id == name for t in targets):
             return ast.literal_eval(node.value)
     raise SystemExit(f"no {name} found in {path}")
 

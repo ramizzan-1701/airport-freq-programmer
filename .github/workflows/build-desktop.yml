@@ -86,11 +86,24 @@ jobs:
       - name: Build
         run: pyinstaller --noconfirm --clean packaging/afp.spec
 
+      # Rendered from src/afp/about.py, so it says what the About screen
+      # says without a second copy of the words existing anywhere.
+      - name: Write the readme that ships beside it
+        run: python packaging/make_readme.py --platform windows dist/README.txt
+
       - uses: actions/upload-artifact@v7
         with:
           name: FTA850FrequencyManager-windows
-          # Quoted: the executable's name has spaces in it on purpose.
-          path: "dist/FTA-850 Frequency Manager.exe"
+          # Both paths sit in dist/, so that is the common root and both
+          # land at the top of the downloaded zip rather than nested.
+          #
+          # Unquoted, unlike the single-path form this replaced: a block
+          # scalar is literal, so quotes would become part of the glob
+          # and match nothing. One pattern per line, so the spaces in the
+          # executable's name need no escaping.
+          path: |
+            dist/FTA-850 Frequency Manager.exe
+            dist/README.txt
           if-no-files-found: error
 
   build-macos:
@@ -156,8 +169,19 @@ jobs:
           echo "Found bundle: $APP_PATH"
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "dist/FTA850FrequencyManager-macos.zip"
 
+      # Rendered from src/afp/about.py, so it says what the About screen
+      # says without a second copy of the words existing anywhere.
+      #
+      # Left beside the zipped bundle rather than inside it: the first
+      # thing this file has to say is that the app must be unzipped
+      # before it will open, which is no use sealed inside that zip.
+      - name: Write the readme that ships beside it
+        run: python packaging/make_readme.py --platform macos dist/README.txt
+
       - uses: actions/upload-artifact@v7
         with:
           name: FTA850FrequencyManager-macos
-          path: dist/FTA850FrequencyManager-macos.zip
+          path: |
+            dist/FTA850FrequencyManager-macos.zip
+            dist/README.txt
           if-no-files-found: error
