@@ -141,6 +141,18 @@ def test_every_intro_link_phrase_actually_appears_in_the_intro():
         assert phrase in joined, f"no intro paragraph contains {phrase!r}, so it would not link"
 
 
+def test_the_workflow_intro_carries_a_link_phrase_too():
+    """Page 2's lead line names the programming software as well, and is
+    rendered through the same linker. It is a separate string from the
+    intro paragraphs, so rewording it is the one edit that would leave
+    page 1 linked and page 2 not -- silently, since an absent phrase just
+    renders as plain text.
+    """
+    assert any(phrase in about.WORKFLOW_INTRO for phrase, _url in about.INTRO_LINKS), (
+        "the workflow intro no longer contains any linkable phrase"
+    )
+
+
 def test_intro_links_are_absolute_urls():
     for _phrase, url in about.INTRO_LINKS:
         assert url.startswith("https://"), url
@@ -253,6 +265,40 @@ def test_the_group_setup_modal_names_the_same_menu_as_the_workflow():
     )
     app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
     assert menu in app_js, "the group-setup modal names a different menu than the workflow"
+
+
+def test_the_group_setup_modal_links_the_same_yaesu_page_as_the_about_screen():
+    """Both screens point a reader at the programming software, and both
+    should land them on the same page. The group-setup modal can be
+    opened before /api/about has ever been fetched, so it carries its own
+    copy of the URL rather than reading one off the response -- which is
+    exactly the kind of duplicate that drifts silently.
+    """
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    declared = app_js.split("const YAESU_SOFTWARE_URL =", 1)[1].split(";", 1)[0]
+    url = declared.strip().strip('"')
+    assert url in dict(about.INTRO_LINKS).values(), (
+        "the group-setup modal links a different page than the About screen"
+    )
+
+
+def test_the_group_setup_modal_link_is_painted_like_the_others():
+    """Anchors are styled by .modal-box a. Scoped to .about-body -- where
+    this rule used to live -- the group-setup link rendered in the
+    browser's default blue on a dark panel, all but unreadable.
+    """
+    css = (STATIC_DIR / "style.css").read_text(encoding="utf-8")
+    assert ".modal-box a { color: var(--acc); }" in css
+
+
+def test_the_about_modal_is_a_fixed_height():
+    """The two pages differ by nearly 200px of content. Sized to fit,
+    the box grew and shrank on a page turn and took the header and the
+    footer's arrows with it -- the button moved out from under the
+    pointer that had just clicked it.
+    """
+    css = (STATIC_DIR / "style.css").read_text(encoding="utf-8")
+    assert "#about-modal .modal-box { height:" in css
 
 
 def test_the_group_setup_modal_uses_the_arrow_glyph():

@@ -23,10 +23,13 @@ INTRO_PARAGRAPHS: tuple[str, ...] = (
     "counter tell you when it will fit on the radio.",
 )
 
-# Phrases inside INTRO_PARAGRAPHS that render as links, and where they
-# point. Kept out of the paragraph so the copy above stays plain prose --
-# no markup to read around when editing it. A phrase that stops appearing
-# in the text fails a test rather than silently rendering no link.
+# Phrases that render as links, and where they point. Applied to the
+# intro paragraphs above and to WORKFLOW_INTRO on page 2 -- the same
+# phrase should reach the same page wherever a reader meets it.
+#
+# Kept out of the copy so the prose stays plain -- no markup to read
+# around when editing it. A phrase that stops appearing in the text fails
+# a test rather than silently rendering no link.
 INTRO_LINKS: tuple[tuple[str, str], ...] = (
     (
         "YCE-46 programming software",
@@ -74,7 +77,7 @@ WORKFLOW_STEPS: tuple[str, ...] = (
     "Open YCE-46. **Select: Transfer → Read From Radio.**",
     "Select: **Memory Book → Memory Group Name.** Confirm 6 groups are "
     "renamed. (see GROUPS SETUP HELP in this app)",
-    "In YCE-46 editor: Go to **File → XML File → Save** to save your "
+    "In YCE-46 Software: Go to **File → XML File → Save** to save your "
     "existing frequency list from your radio.",
     "Import the saved XML file into this app. It will import all your "
     "frequencies saved to custom groups.",

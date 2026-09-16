@@ -870,7 +870,25 @@ main#app > .workspace,
 /* Wide variant for the custom-entry list. */
 .modal-box.wide { width: 660px; max-height: 88%; }
 
+/* Any link inside a modal. Scoped to the box rather than to one screen:
+   the About intro and the group-setup note link the same Yaesu page, and
+   while this rule lived on .about-body the group-setup copy rendered in
+   the browser's default blue -- close to unreadable on a dark panel. */
+.modal-box a { color: var(--acc); }
+
 /* ---------- about ---------- */
+
+/* Fixed height rather than fitting each page.
+   The two pages differ by nearly 200px of content, and sizing to fit
+   meant the box grew and shrank on every page turn -- the header slid
+   up, the footer slid down, and the arrow you just clicked moved out
+   from under the pointer.
+   Set to clear the taller page (the overview), so neither page scrolls
+   at a normal window size and page 2 simply ends early. max-height
+   still clamps this on a short window, but it clamps both pages to the
+   same thing, so the header and footer stay put either way. */
+#about-modal .modal-box { height: 810px; }
+
 .about-body { padding: 16px 24px 18px; }
 .about-body p {
   margin: 0 0 12px;
@@ -878,6 +896,8 @@ main#app > .workspace,
   line-height: 1.55;
   color: var(--ink2);
 }
+/* Section headings, matching .filters-head h2 exactly -- green is what
+   titles a major section of the app, so the two read as the same rank. */
 .about-body h3 {
   margin: 18px 0 10px;
   font-family: var(--font-display);
@@ -885,8 +905,10 @@ main#app > .workspace,
   font-size: 12px;
   letter-spacing: .18em;
   text-transform: uppercase;
-  color: var(--acc);
+  color: var(--ok);
 }
+/* Each page now opens on one, and the body already has its own padding. */
+.about-body h3:first-child { margin-top: 0; }
 .about-features {
   margin: 0;
   padding-left: 18px;
@@ -907,8 +929,6 @@ main#app > .workspace,
   line-height: 1.7;
   color: var(--ink3);
 }
-.about-body a,
-.about-meta a { color: var(--acc); }
 
 /* Numbered workflow on page 2. */
 .about-workflow {

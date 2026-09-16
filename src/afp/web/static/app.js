@@ -1527,6 +1527,13 @@ function showBlockedImportModal({ groups, found, available }) {
  * single wall of text this wasn't getting read, which matters because a
  * wrong group name fails silently.
  */
+// Yaesu's product page for the programming software. Kept in step with
+// afp.about.INTRO_LINKS by a test -- the About screen links the same
+// page, and a reader who follows one and then the other should not land
+// somewhere different.
+const YAESU_SOFTWARE_URL =
+  "https://yaesu.com/product-detail.aspx?Model=FTA-850L&CatName=Portables";
+
 function appendGroupSetupInstructions(box) {
   const scroll = document.createElement("div");
   scroll.className = "modal-scroll";
@@ -1540,7 +1547,15 @@ function appendGroupSetupInstructions(box) {
   kicker.className = "setup-kicker";
   kicker.textContent = "Why this matters";
   const whyText = document.createElement("p");
-  whyText.textContent = "This app will sort frequencies into 6 alphabetized Groups for quick recall on your radio. The Yaesu YCE-46 editor can't create or edit Group names on import - they must already exist there, or that group's frequencies will be dropped.";
+  // Linked the same way the About screen links it, and to the same page.
+  // This modal can be opened before /api/about has ever been fetched --
+  // from the pre-generate gate on a fresh install -- so the URL is a
+  // local constant rather than read off aboutCopy.
+  appendLinkedText(
+    whyText,
+    "This app will sort frequencies into 6 alphabetized Groups for quick recall on your radio. The Yaesu YCE-46 Programming Software can't create or edit Group names on import - they must already exist there, or that group's frequencies will be dropped.",
+    [{ phrase: "YCE-46 Programming Software", url: YAESU_SOFTWARE_URL }],
+  );
   const whyLead = document.createElement("p");
   whyLead.className = "setup-lead";
   whyLead.textContent = "There are 9 Group slots available. Rename 6 of them:";
@@ -1554,7 +1569,7 @@ function appendGroupSetupInstructions(box) {
   step1.appendChild(stepNumber("1"));
   const step1Text = document.createElement("div");
   step1Text.append(
-    document.createTextNode("Open the YCE-46 editor. Go to: "),
+    document.createTextNode("Open the YCE-46 Software. Go to: "),
     Object.assign(document.createElement("b"), { textContent: "Memory Book → Memory Group Name" }),
     document.createTextNode("."),
   );
@@ -1745,16 +1760,26 @@ function renderAboutPage(body, page) {
   else appendAboutWorkflow(body);
 }
 
+/** A green section heading, the same rank the FILTERS header uses --
+ * green marks a major section of the app wherever it appears. Written
+ * in sentence case; the stylesheet does the uppercasing.
+ */
+function aboutHeading(text) {
+  const h3 = document.createElement("h3");
+  h3.textContent = text;
+  return h3;
+}
+
 function appendAboutOverview(body) {
+  body.appendChild(aboutHeading("What it does"));
+
   for (const text of aboutCopy.intro) {
     const p = document.createElement("p");
     appendLinkedText(p, text, aboutCopy.intro_links || []);
     body.appendChild(p);
   }
 
-  const h3 = document.createElement("h3");
-  h3.textContent = "What it does";
-  body.appendChild(h3);
+  body.appendChild(aboutHeading("How it does it"));
 
   const ul = document.createElement("ul");
   ul.className = "about-features";
@@ -1784,8 +1809,12 @@ function appendAboutOverview(body) {
 }
 
 function appendAboutWorkflow(body) {
+  body.appendChild(aboutHeading("Workflow"));
+
+  // Same links as the intro paragraphs: this line names the programming
+  // software too, and a phrase that links on page 1 should link here.
   const lead = document.createElement("p");
-  lead.textContent = aboutCopy.workflow_intro;
+  appendLinkedText(lead, aboutCopy.workflow_intro, aboutCopy.intro_links || []);
   body.appendChild(lead);
 
   const ol = document.createElement("ol");
