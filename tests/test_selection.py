@@ -2,11 +2,104 @@ from afp.export.fta850l import FTA_850L
 from afp.export.xml_writer import build_xml, validate
 from afp.schema import Airport, Frequency, Ils, NormalizedData
 from afp.selection import (
+    MAX_TUNABLE_MHZ,
     _abbreviate_facility_id,
     default_group_for,
     orphan_tag_ids,
     select_entries,
 )
+
+
+# ---------- what the radio can actually tune ----------
+
+
+def test_frequencies_above_the_airband_never_become_entries():
+    """NASR lists the military UHF assignments in the same table as the
+    VHF ones -- 12,354 of 40,388 rows in the 2026-09-03 cycle, 31% of the
+    file. The radio has no receiver up there, so every one of those was a
+    memory slot spent on a frequency nobody could select.
+    """
+    data = NormalizedData(
+        airports=[_airport("XXX")],
+        frequencies=[
+            _freq("XXX", 121.4, "GROUND", raw_freq_use="GND/P"),
+            _freq("XXX", 251.05, "GROUND", raw_freq_use="GND/P"),
+            _freq("XXX", 21964.0, "OTHER"),
+        ],
+        ils=[],
+    )
+    for mode in ("smart", "raw"):
+        freqs = {e.freq_mhz for e in select_entries(data, mode=mode)}
+        assert freqs == {121.4}, mode
+
+
+def test_the_band_limit_applies_to_raw_mode_too():
+    """Raw means every registered frequency, not every row in the file.
+    Which of two frequencies to publish is an interpretation choice;
+    whether the radio can tune one at all is not.
+    """
+    data = NormalizedData(
+        airports=[_airport("XXX")],
+        frequencies=[_freq("XXX", 243.0, "EMERGENCY")],
+        ils=[],
+    )
+    assert select_entries(data, mode="raw") == []
+
+
+def test_the_top_of_the_airband_is_kept():
+    """136.975 is the last usable channel -- an off-by-one here would
+    silently drop the top of the band.
+    """
+    data = NormalizedData(
+        airports=[_airport("XXX")],
+        frequencies=[_freq("XXX", 136.975, "APCH_DEP", raw_freq_use="APCH/S")],
+        ils=[],
+    )
+    assert [e.freq_mhz for e in select_entries(data, mode="smart")] == [136.975]
+    assert 136.975 < MAX_TUNABLE_MHZ
+
+
+def test_nav_band_frequencies_below_the_airband_are_kept():
+    """The limit is one-sided on purpose: VOR and ILS localizers sit
+    below the airband (108.0-117.95) and the radio tunes them.
+    """
+    data = NormalizedData(
+        airports=[_airport("XXX")],
+        frequencies=[_freq("XXX", 114.9, "VOR", raw_freq_use="BIG VORTAC")],
+        ils=[],
+    )
+    assert [e.freq_mhz for e in select_entries(data, mode="smart")] == [114.9]
+
+
+def test_a_facility_with_nothing_tunable_produces_no_entries():
+    """Rather than an airport that survives into the results with an
+    empty frequency list behind it.
+    """
+    data = NormalizedData(
+        airports=[_airport("UHF")],
+        frequencies=[
+            _freq("UHF", 257.8, "TOWER", raw_freq_use="LCL/P"),
+            _freq("UHF", 322.5, "RCAG"),
+        ],
+        ils=[],
+    )
+    assert select_entries(data, mode="smart") == []
+
+
+def test_a_uhf_tower_row_cannot_take_the_primary_comm_slot():
+    """658 TOWER rows in the cycle are UHF. Before the band limit one of
+    those could be the first TOWER row for an airport and win the slot,
+    pushing the VHF tower out of the export entirely.
+    """
+    data = NormalizedData(
+        airports=[_airport("XXX")],
+        frequencies=[
+            _freq("XXX", 257.8, "TOWER", raw_freq_use="LCL/P"),
+            _freq("XXX", 120.2, "TOWER", raw_freq_use="LCL/P"),
+        ],
+        ils=[],
+    )
+    assert [e.freq_mhz for e in select_entries(data, mode="smart")] == [120.2]
 
 
 def _airport(airport_id: str, public_use: bool = True) -> Airport:
@@ -116,12 +209,15 @@ def test_standalone_facility_uses_its_own_position_and_group():
     assert entries[0].group == default_group_for("AVE")
 
 
-def test_tower_beats_ctaf_in_smart_mode():
+def test_tower_beats_ctaf_in_smart_mode_on_a_shared_frequency():
+    """The case the rule is actually for: a towered field whose CTAF is
+    the tower frequency, listed twice. One channel, so one entry.
+    """
     data = NormalizedData(
         airports=[_airport("XXX")],
         frequencies=[
             _freq("XXX", 118.0, "TOWER", raw_freq_use="LCL/P"),
-            _freq("XXX", 122.8, "CTAF"),
+            _freq("XXX", 118.0, "CTAF"),
         ],
         ils=[],
     )
@@ -130,6 +226,75 @@ def test_tower_beats_ctaf_in_smart_mode():
     assert len(comm_entries) == 1
     assert comm_entries[0].tag_name == "XXX-CT"
     assert comm_entries[0].freq_mhz == 118.0
+
+
+def test_a_ctaf_on_its_own_frequency_survives_smart_mode():
+    """Smart mode suppressed CTAF whenever a tower existed at all, which
+    threw away a real, separately-tuned channel: AKN tower 118.3 against
+    CTAF 121.9, BIG 119.8 against 122.9 -- 18 airports in the 2026-09-03
+    cycle. Only a shared frequency is a duplicate.
+    """
+    data = NormalizedData(
+        airports=[_airport("AKN")],
+        frequencies=[
+            _freq("AKN", 118.3, "TOWER", raw_freq_use="LCL/P"),
+            _freq("AKN", 121.9, "CTAF"),
+        ],
+        ils=[],
+    )
+    entries = select_entries(data, mode="smart")
+    assert {e.freq_mhz for e in entries} == {118.3, 121.9}
+
+
+def test_the_primary_tower_channel_wins_not_whichever_is_listed_first():
+    """NASR lists a tower's primary (LCL/P) and secondary (LCL/S) as
+    separate rows in no guaranteed order, and smart mode took the first.
+    At HWD that published the secondary on 118.9 and dropped the primary
+    on 120.2 -- which also dropped the CTAF that shared it.
+
+    Both channels are kept (they are two real frequencies), but the
+    primary takes the unsuffixed tag.
+    """
+    data = NormalizedData(
+        airports=[_airport("HWD")],
+        frequencies=[
+            _freq("HWD", 118.9, "TOWER", raw_freq_use="LCL/S"),
+            _freq("HWD", 120.2, "CTAF"),
+            _freq("HWD", 120.2, "TOWER", raw_freq_use="LCL/P"),
+        ],
+        ils=[],
+    )
+    entries = select_entries(data, mode="smart")
+    by_tag = {e.tag_name: e.freq_mhz for e in entries}
+
+    assert by_tag == {"HWD-CT": 120.2, "HWD-CT2": 118.9}
+    # The CTAF shares the primary's frequency, so it is still suppressed.
+    assert "HWD-CTAF" not in by_tag
+
+
+def test_two_tower_channels_are_not_collapsed_into_one():
+    data = NormalizedData(
+        airports=[_airport("NGP")],
+        frequencies=[
+            _freq("NGP", 125.525, "TOWER", raw_freq_use="LCL/P"),
+            _freq("NGP", 134.85, "TOWER", raw_freq_use="LCL/P"),
+        ],
+        ils=[],
+    )
+    entries = select_entries(data, mode="smart")
+    assert {e.freq_mhz for e in entries} == {125.525, 134.85}
+
+
+def test_a_tower_frequency_listed_twice_yields_one_entry():
+    data = NormalizedData(
+        airports=[_airport("XXX")],
+        frequencies=[
+            _freq("XXX", 118.0, "TOWER", raw_freq_use="LCL/P"),
+            _freq("XXX", 118.0, "TOWER", raw_freq_use="LCL/P IC"),
+        ],
+        ils=[],
+    )
+    assert len(select_entries(data, mode="smart")) == 1
 
 
 def test_unicom_dropped_in_smart_mode_when_it_matches_ctaf():
@@ -317,7 +482,9 @@ def test_multiple_distinct_frequencies_sharing_a_category_get_numeric_suffix():
         frequencies=[
             _freq("HWD", 125.35, "APCH_DEP", raw_freq_use="APCH/S"),
             _freq("HWD", 134.50, "APCH_DEP", raw_freq_use="APCH/S"),
-            _freq("HWD", 338.20, "APCH_DEP", raw_freq_use="APCH/S"),
+            # Was 338.20 -- HWD really does carry that sector, but it is
+            # UHF and no longer produces an entry at all.
+            _freq("HWD", 135.65, "APCH_DEP", raw_freq_use="APCH/S"),
         ],
         ils=[],
     )
@@ -327,7 +494,7 @@ def test_multiple_distinct_frequencies_sharing_a_category_get_numeric_suffix():
     assert tags == ["HWD-APCH", "HWD-APCH2", "HWD-APCH3"]
     assert len(set(tags)) == 3  # no collisions
     freqs_by_tag = {e.tag_name: e.freq_mhz for e in entries}
-    assert freqs_by_tag == {"HWD-APCH": 125.35, "HWD-APCH2": 134.50, "HWD-APCH3": 338.20}
+    assert freqs_by_tag == {"HWD-APCH": 125.35, "HWD-APCH2": 134.50, "HWD-APCH3": 135.65}
 
 
 def test_collapsing_is_scoped_within_a_category_not_globally_by_frequency():
@@ -371,14 +538,16 @@ def test_different_frequencies_in_same_category_still_get_separate_entries():
         airports=[_airport("SFO")],
         frequencies=[
             _freq("SFO", 133.95, "APCH_DEP", raw_freq_use="APCH/S"),
-            _freq("SFO", 251.05, "APCH_DEP", raw_freq_use="APCH/S"),
+            # Was 251.05, which is UHF and now filtered out before
+            # selection ever sees it.
+            _freq("SFO", 135.40, "APCH_DEP", raw_freq_use="APCH/S"),
         ],
         ils=[],
     )
     entries = select_entries(data, mode="smart")
     freqs = {e.freq_mhz for e in entries}
 
-    assert freqs == {133.95, 251.05}
+    assert freqs == {133.95, 135.40}
     assert len({e.tag_name for e in entries}) == 2  # disambiguated, no collision
 
 

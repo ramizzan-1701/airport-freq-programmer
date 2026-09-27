@@ -179,7 +179,7 @@ def test_airspace_emergency_ndb_hidden_from_web_ui_but_still_filterable(tmp_path
             Frequency(airport_id="AAA", freq_mhz=122.8, freq_category="CTAF"),
             Frequency(airport_id="AAA", freq_mhz=120.9, freq_category="AIRSPACE_INFO", raw_freq_use="CLASS B"),
             Frequency(airport_id="AAA", freq_mhz=121.5, freq_category="EMERGENCY"),
-            Frequency(airport_id="AAA", freq_mhz=396.0, freq_category="NDB"),
+            Frequency(airport_id="AAA", freq_mhz=0.396, freq_category="NDB"),
         ],
         ils=[],
     )

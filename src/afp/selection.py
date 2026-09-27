@@ -174,6 +174,23 @@ class Entry:
 # constant so other code (the group-setup CTA, and the custom-entry import
 # flow's recognized/custom split) has a single source of truth rather than
 # re-deriving or duplicating this list.
+# The top of what the radio can tune. The FTA-850 covers the VHF airband
+# and the nav band below it; it has no receiver above the airband at all,
+# so anything at or above this is not a frequency the user could ever
+# select -- it is a memory slot spent on nothing.
+#
+# NASR carries the military UHF assignments (225-400 MHz) in the same
+# table as the VHF ones, plus a few radar entries far higher: 12,354 of
+# 40,388 rows in the 2026-09-03 cycle, 31% of the file. Every one was
+# eligible for the 400-entry export, and 658 of them were TOWER rows --
+# which is also how a UHF tower row could win the primary-comm slot for
+# an airport and push the VHF one out.
+#
+# No lower bound: the nav band (VOR from 108.0, ILS localizers 108.3 to
+# 111.95 on this cycle) is below the airband and is tunable. NDB, which
+# is far lower and genuinely unusable, is already excluded by category.
+MAX_TUNABLE_MHZ = 137.0
+
 FIXED_GROUP_NAMES = frozenset({"0-9", "A-E", "F-J", "K-O", "P-T", "U-Z"})
 
 
@@ -395,12 +412,38 @@ def _comm_entries(
             entries.append(_make_entry(f, airport, f.freq_mhz, tag_counts))
         return entries
 
-    # smart mode: Tower beats CTAF
-    tower = next((f for f in freqs if f.freq_category == "TOWER"), None)
+    # smart mode: Tower beats CTAF, but only on a shared frequency.
+    #
+    # This took the first TOWER row and dropped CTAF outright, which was
+    # wrong twice over on real data (2026-09-03 cycle):
+    #
+    #   NASR lists a tower's primary (LCL/P) and secondary (LCL/S)
+    #   channels as separate rows in no guaranteed order, so "the first
+    #   one" could be a secondary. At HWD that published the secondary on
+    #   118.9 and dropped the primary on 120.2. 14 airports were affected,
+    #   some badly: IDA's first tower row is 109.0, a nav-band artifact,
+    #   chosen over the real 118.5.
+    #
+    #   And dropping CTAF whatever its frequency lost genuinely separate
+    #   channels -- AKN tower 118.3 against CTAF 121.9, BIG 119.8 against
+    #   122.9. 18 airports had a CTAF on its own frequency suppressed.
+    #
+    # So: every distinct tower frequency is its own entry (two channels
+    # are two channels, not one service listed twice), primary first, and
+    # CTAF is suppressed only when a tower already occupies that exact
+    # frequency. Same rule the UNICOM check below has always used.
+    towers = [f for f in freqs if f.freq_category == "TOWER"]
     ctaf = next((f for f in freqs if f.freq_category == "CTAF"), None)
-    primary_comm = tower or ctaf
-    if primary_comm is not None:
-        entries.append(_make_entry(primary_comm, airport, primary_comm.freq_mhz, tag_counts))
+
+    seen_freqs: set[float] = set()
+    for f in sorted(towers, key=lambda f: (0 if "/P" in f.raw_freq_use else 1, f.freq_mhz)):
+        if f.freq_mhz in seen_freqs:
+            continue
+        seen_freqs.add(f.freq_mhz)
+        entries.append(_make_entry(f, airport, f.freq_mhz, tag_counts))
+
+    if ctaf is not None and ctaf.freq_mhz not in seen_freqs:
+        entries.append(_make_entry(ctaf, airport, ctaf.freq_mhz, tag_counts))
 
     # smart mode: ATIS > ASOS > AWOS within the unified Weather Station category
     weather_rows = [f for f in freqs if f.freq_category == "WEATHER_STATION"]
@@ -502,8 +545,16 @@ def select_entries(
     if mode not in ("smart", "raw"):
         raise ValueError(f"unknown selection mode: {mode!r}")
 
+    # Out-of-band rows are dropped here rather than in either mode's own
+    # path: raw mode means "every registered frequency", not "every row
+    # in the file", and a frequency the radio cannot tune is not an
+    # interpretation choice. Done before the by-airport grouping so a
+    # facility with nothing tunable left produces no entries at all
+    # instead of an empty one.
     freqs_by_airport: dict[str, list[Frequency]] = {}
     for f in data.frequencies:
+        if f.freq_mhz >= MAX_TUNABLE_MHZ:
+            continue
         freqs_by_airport.setdefault(f.airport_id, []).append(f)
 
     ils_by_airport: dict[str, list[Ils]] = {}
