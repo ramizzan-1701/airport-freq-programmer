@@ -52,17 +52,27 @@ jobs:
       - name: Install package and PyInstaller
         run: pip install -e ".[build-windows]"
 
-      # Defender scores the stock bootloader itself as
-      # Trojan:Win32/Wacatac.B!ml -- the small C launcher every
-      # PyInstaller app on Windows shares, which vendors have seen in
-      # enough real malware to flag on sight. Switching this build from
-      # onefile to onedir did not help, which ruled out the
-      # self-extraction behaviour and left the binary itself.
+      # An attempt at Defender's Trojan:Win32/Wacatac.B!ml verdict on the
+      # download: the theory was that the stock bootloader -- the small C
+      # launcher every PyInstaller app on Windows shares, seen in enough
+      # real malware to be scored on sight -- would stop matching if it
+      # were compiled here instead of shipped as a prebuilt wheel.
       #
-      # Compiling it here produces a launcher that is not the one in
-      # their heuristics. The runner already has the MSVC toolchain, so
-      # this needs no extra setup -- just the source distribution instead
-      # of the wheel.
+      # It did not work, and the claim that it had was wrong. The
+      # bootloader's SHA-256 came out identical (2291f269...) on all five
+      # runs, and the only commit between a build that downloaded cleanly
+      # and one that was flagged touched packaging/py2app_setup.py and
+      # tests/test_about.py, neither of which reaches the Windows
+      # executable. Two builds with the same content were scored
+      # differently, so the verdict is nondeterministic per hash and this
+      # step is not what decides it.
+      #
+      # Kept anyway: it costs nothing (the runner already has MSVC), it
+      # is the honest way to build, and it removes one variable if the
+      # verdict is ever investigated properly. The real fixes are a
+      # false-positive submission to Microsoft for a given binary, and a
+      # code-signing certificate for the long run -- reputation attaches
+      # to the certificate rather than to each new hash.
       - name: Rebuild the PyInstaller bootloader from source
         shell: bash
         run: |

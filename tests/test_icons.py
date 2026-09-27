@@ -121,11 +121,11 @@ def test_the_windows_build_is_onefile():
     """One .exe, nothing beside it.
 
     This was onedir for one release, trying to shake Defender's
-    Wacatac.B!ml verdict. It did not shake it -- compiling the bootloader
-    on the runner did, and that fix is independent of the layout -- and
-    onedir cost real usability: the .exe will not start without the
-    _internal folder next to it, so opening it from inside a zip viewer
-    fails.
+    Wacatac.B!ml verdict. It did not shake it, and nothing else has been
+    shown to either -- so the layout is decided on usability alone, where
+    onefile wins clearly: a onedir .exe will not start without the
+    _internal folder next to it, so opening it straight from inside a zip
+    viewer fails.
     """
     spec = (REPO_ROOT / "packaging" / "afp.spec").read_text(encoding="utf-8")
     assert "exclude_binaries=True" not in spec, "EXE() is holding the binaries back again"
@@ -166,14 +166,20 @@ def test_both_builds_ship_a_readme_beside_the_app():
 
 
 def test_ci_compiles_its_own_pyinstaller_bootloader():
-    """Defender scores the stock bootloader as Wacatac.B!ml -- the C
-    launcher every PyInstaller app on Windows shares, seen in enough real
-    malware to be flagged on sight. Going onedir did not help, which
-    ruled out the self-extraction behaviour and left the binary itself.
+    """Pins the source build of the bootloader -- the C launcher every
+    PyInstaller app on Windows shares, and the suspected reason Defender
+    scores the download as Wacatac.B!ml.
 
-    Building it on the runner yields a launcher that is not the one in
-    their heuristics. Dropping back to the wheel would silently restore
-    the flagged binary, so the step is pinned here.
+    This does NOT fix that verdict, though it was once recorded here as
+    having done so. The bootloader's SHA-256 was identical across all
+    five runs, and the only commit between a clean download and a flagged
+    one touched files that never reach the Windows executable -- so two
+    builds with the same content were scored differently. Nothing found
+    so far predicts the verdict.
+
+    Pinned regardless, because dropping silently back to the wheel would
+    change what ships without anyone choosing that, and because it keeps
+    one variable fixed if this is ever investigated properly.
     """
     workflow = (REPO_ROOT / ".github" / "workflows" / "build-desktop.yml").read_text(encoding="utf-8")
     windows_job = workflow.split("build-windows:", 1)[1].split("build-macos:", 1)[0]

@@ -124,10 +124,19 @@ pyz = PYZ(a.pure)
 #
 # This was briefly onedir, to escape Defender scoring the download as
 # Trojan:Win32/Wacatac.B!ml. That did not help -- the detection followed
-# the onedir build too, which ruled out the self-extraction behaviour and
-# pointed at the bootloader binary itself. Compiling that on the runner
-# (see the workflow) is what actually cleared it, and that fix is
-# independent of how the app is laid out.
+# the onedir build too, which ruled out the self-extraction behaviour.
+#
+# Nothing since has been shown to clear that verdict either. The
+# workflow also rebuilds the bootloader from source, which was believed
+# to have fixed it and did not: the bootloader's SHA-256 was identical
+# across all five runs, and the only commit between a build that
+# downloaded cleanly and one that was flagged touched
+# packaging/py2app_setup.py and tests/test_about.py, neither of which
+# reaches this executable. Two builds with the same content scored
+# differently, so the verdict behaves as nondeterministic per hash.
+#
+# The layout is therefore chosen on usability alone, not on what it does
+# to a scanner.
 #
 # What onedir cost was real: the .exe cannot run without the _internal
 # folder beside it, so opening it straight from inside a zip viewer --
