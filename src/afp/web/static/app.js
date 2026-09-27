@@ -1808,7 +1808,7 @@ function renderGroupsBar() {
   app.className = "groups-row";
 
   const yoursLabel = document.createElement("span");
-  yoursLabel.className = "groups-kicker";
+  yoursLabel.className = "groups-kicker yours";
   yoursLabel.textContent = "Your groups";
   yours.appendChild(yoursLabel);
   yours.appendChild(helpIcon(
@@ -2347,7 +2347,10 @@ function renderResults(result) {
 
     const groupTd = document.createElement("td");
     const pill = document.createElement("span");
-    pill.className = "group-pill";
+    // Amber marks a group the user owns. Without this a copied or
+    // imported entry's group read exactly like one of the app's own,
+    // which is the one distinction this column exists to make.
+    pill.className = "group-pill" + (e.is_custom ? " custom" : "");
     pill.textContent = e.group;
     groupTd.appendChild(pill);
     tr.appendChild(groupTd);

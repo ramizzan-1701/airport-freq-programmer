@@ -43,7 +43,14 @@
   /* status */
   --warn:     #E8407D;
   --ok:       #3FCB57;
-  --custom:   #3FCB57;
+  /* Amber means "yours": the three custom group slots, their names
+     wherever they appear, and the counts of what is in them. Its own
+     hue rather than a second green, because green already titles the
+     app's own sections -- and a custom group pill in that green made a
+     preserved row look more important than the FAA rows around it,
+     which is why those annotations were moved to grey earlier.
+     8.3:1 on the results panel, 6.6:1 on the chrome. */
+  --custom:   #E0A33C;
 
   --radius:   3px;
 
@@ -232,11 +239,14 @@ body {
 
 .cycle-status { font-size: 11.5px; color: var(--ink2); }
 
+/* Green, not amber: this says a newer FAA cycle is available, which has
+   nothing to do with the user's own groups. It only ever looked right
+   because --custom used to be the same green as --ok. */
 .update-badge {
   font-size: 11.5px;
   font-weight: 600;
-  color: var(--custom);
-  border: 1px solid var(--custom);
+  color: var(--ok);
+  border: 1px solid var(--ok);
   border-radius: var(--radius);
   padding: 3px 9px;
 }
@@ -1126,6 +1136,10 @@ main#app > .workspace,
   white-space: nowrap;
 }
 .groups-row .btn-small { flex: none; }
+
+/* The label wears the colour of the thing it names, so the amber in
+   the table's Group column is traceable back to this row. */
+.groups-kicker.yours { color: var(--custom); }
 
 .groups-preview {
   font-family: var(--font-mono);

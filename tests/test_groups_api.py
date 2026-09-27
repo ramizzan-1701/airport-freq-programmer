@@ -484,3 +484,59 @@ def test_an_import_that_keeps_nothing_leaves_no_slots_claimed(client):
                 content=_book(_memo("X", "0-9"), _memo("Y", "A-E")))
     slots = client.get("/api/groups").json()["custom_slots"]
     assert all(s["name"] is None for s in slots)
+
+
+# ---------- amber means "yours" ----------
+
+
+def _css() -> str:
+    from afp.web.app import STATIC_DIR
+
+    return (STATIC_DIR / "style.css").read_text(encoding="utf-8")
+
+
+def test_the_custom_colour_is_its_own_hue():
+    """--custom and --ok were the same green, which is how a custom
+    group pill ended up wearing the colour that titles the app's own
+    sections. Amber gives the user's groups a hue nothing else claims.
+    """
+    import re
+
+    css = _css()
+    tokens = dict(re.findall(r"--(\w+):\s*(#[0-9A-Fa-f]{6});", css))
+    assert tokens["custom"] != tokens["ok"]
+    assert tokens["custom"] != tokens["warn"]
+    assert tokens["custom"] != tokens["acc"]
+
+
+def test_custom_group_names_are_marked_in_the_results_table():
+    """They rendered identically to the app's own group names, which is
+    the one distinction that column exists to make.
+    """
+    from afp.web.app import STATIC_DIR
+
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    assert 'pill.className = "group-pill" + (e.is_custom ? " custom" : "");' in app_js
+    assert ".group-pill.custom { border-color: var(--custom); color: var(--custom); }" in _css()
+
+
+def test_the_two_group_labels_wear_the_colours_they_name():
+    """Your groups in amber, the app's in green -- so the amber in the
+    Group column is traceable back to the row that owns it.
+    """
+    from afp.web.app import STATIC_DIR
+
+    assert ".groups-kicker.yours { color: var(--custom); }" in _css()
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    assert 'yoursLabel.className = "groups-kicker yours"' in app_js
+    assert 'appLabel.className = "groups-kicker"' in app_js
+
+
+def test_the_update_badge_did_not_follow_the_custom_colour():
+    """It announces a newer FAA cycle, which has nothing to do with the
+    user's groups. It only ever looked right because --custom happened
+    to be the same green as --ok.
+    """
+    rule = _css().split(".update-badge {", 1)[1].split("}", 1)[0]
+    assert "var(--ok)" in rule
+    assert "var(--custom)" not in rule
