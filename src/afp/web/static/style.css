@@ -1256,3 +1256,8 @@ main#app > .workspace,
    destructive button is never the one that just looks default. */
 .btn-danger { background: var(--warn); border-color: var(--warn); color: #140C0C; }
 .btn-danger:hover { filter: brightness(1.08); }
+
+/* Shift-clicking a checkbox otherwise drags a native text selection
+   across every row it spans. The mousedown handler suppresses it; this
+   covers the rows the pointer crosses on the way. */
+.col-select { user-select: none; }

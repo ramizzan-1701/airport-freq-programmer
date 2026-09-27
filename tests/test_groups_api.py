@@ -540,3 +540,78 @@ def test_the_update_badge_did_not_follow_the_custom_colour():
     rule = _css().split(".update-badge {", 1)[1].split("}", 1)[0]
     assert "var(--ok)" in rule
     assert "var(--custom)" not in rule
+
+
+# ---------- shift-click range selection ----------
+
+
+def _js() -> str:
+    from afp.web.app import STATIC_DIR
+
+    return (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+
+
+def test_the_checkbox_listens_for_click_not_change():
+    """A change event carries no shiftKey -- by the time it fires the
+    modifier is gone, so a range could never be detected from one.
+    """
+    js = _js()
+    assert 'check.addEventListener("click", (ev) => {' in js
+    assert 'check.addEventListener("change"' not in js
+
+
+def test_a_range_replaces_the_selection_rather_than_adding_to_it():
+    """Explorer and Gmail replace. It also makes a mis-aimed range
+    recoverable by shift-clicking elsewhere instead of unpicking rows.
+    """
+    body = _js().split("function selectRangeTo(key) {", 1)[1].split("\n}", 1)[0]
+    assert "selectedTags = new Set(keys.slice(lo, hi + 1));" in body
+
+
+def test_the_anchor_does_not_move_when_a_range_is_drawn():
+    """So the same range can be resized by shift-clicking again, rather
+    than each shift-click re-anchoring and halving the range.
+    """
+    body = _js().split("function selectRangeTo(key) {", 1)[1].split("\n}", 1)[0]
+    assert "anchorKey =" not in body, "selectRangeTo moves the anchor"
+    assert "anchorKey = key;" in _js().split("function toggleRow(", 1)[1].split("\n}", 1)[0]
+
+
+def test_a_range_works_in_both_directions():
+    """Clicking above the anchor is as ordinary as clicking below it."""
+    body = _js().split("function selectRangeTo(key) {", 1)[1].split("\n}", 1)[0]
+    assert "from <= to ? [from, to] : [to, from]" in body
+
+
+def test_the_anchor_is_dropped_when_its_row_leaves_the_table(): 
+    """Filtering or re-querying rebuilds the rows. An anchor pointing at
+    one that is gone would make the next shift-click measure from
+    nowhere -- indexOf returns -1, which without this would slice from
+    the end of the list.
+    """
+    js = _js()
+    assert "if (anchorKey !== null && !renderedByTag.has(anchorKey)) anchorKey = null;" in js
+    body = js.split("function selectRangeTo(key) {", 1)[1].split("\n}", 1)[0]
+    assert "if (from === -1 || to === -1)" in body
+
+
+def test_select_all_leaves_no_anchor():
+    """It did not come from a row, so there is nowhere for a following
+    shift-click to measure from.
+    """
+    body = _js().split('document.getElementById("select-all-rows")', 1)[1].split("});", 1)[0]
+    assert "anchorKey = null;" in body
+
+
+def test_shift_clicking_does_not_drag_a_text_selection():
+    """Native shift-click extends a text selection across every row it
+    spans, which is both ugly and awkward to clear.
+    """
+    js = _js()
+    assert 'check.addEventListener("mousedown", (ev) => {' in js
+    assert "if (ev.shiftKey) ev.preventDefault();" in js
+
+    from afp.web.app import STATIC_DIR
+
+    css = (STATIC_DIR / "style.css").read_text(encoding="utf-8")
+    assert ".col-select { user-select: none; }" in css

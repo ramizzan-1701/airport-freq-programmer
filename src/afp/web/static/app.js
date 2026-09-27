@@ -2067,14 +2067,46 @@ function updateSelectionUi() {
   all.indeterminate = picked > 0 && picked < total;
 }
 
+// The last row ticked without shift. Shift-clicking selects from here
+// to wherever was clicked, and this deliberately does not move when it
+// does -- so a range can be resized by shift-clicking again rather than
+// having to start over.
+let anchorKey = null;
+
 function toggleRow(key, on) {
   if (on) selectedTags.add(key);
   else selectedTags.delete(key);
+  anchorKey = key;
+  updateSelectionUi();
+}
+
+/** Selects every row between the anchor and `key`, inclusive.
+ *
+ * Replaces the selection rather than adding to it, which is what
+ * Explorer and Gmail do and what makes a mis-aimed range recoverable by
+ * shift-clicking somewhere else instead of undoing row by row.
+ *
+ * Order comes from renderedByTag, which is a Map built in render order,
+ * so "between" means what it looks like on screen -- including after a
+ * re-sort, with no separate index to keep in step.
+ */
+function selectRangeTo(key) {
+  const keys = [...renderedByTag.keys()];
+  const from = keys.indexOf(anchorKey);
+  const to = keys.indexOf(key);
+  if (from === -1 || to === -1) {
+    // The anchor has scrolled out of the result set since it was set.
+    toggleRow(key, true);
+    return;
+  }
+  const [lo, hi] = from <= to ? [from, to] : [to, from];
+  selectedTags = new Set(keys.slice(lo, hi + 1));
   updateSelectionUi();
 }
 
 function clearSelection() {
   selectedTags.clear();
+  anchorKey = null;
   updateSelectionUi();
 }
 
@@ -2212,6 +2244,9 @@ async function deleteCustomEntries(entries) {
 document.getElementById("select-all-rows").addEventListener("change", (e) => {
   if (e.target.checked) selectedTags = new Set(renderedByTag.keys());
   else selectedTags.clear();
+  // No anchor: this did not come from a row, so there is no sensible
+  // place for a following shift-click to measure from.
+  anchorKey = null;
   updateSelectionUi();
 });
 
@@ -2336,7 +2371,19 @@ function renderResults(result) {
     check.type = "checkbox";
     check.className = "row-check";
     check.setAttribute("aria-label", `Select ${e.tag_name}`);
-    check.addEventListener("change", () => toggleRow(rowKey(e), check.checked));
+    // click rather than change: a change event carries no shiftKey, and
+    // by the time it fires the modifier is gone. A checkbox's checked
+    // property is already updated when click runs, so the plain path
+    // reads exactly the same.
+    check.addEventListener("click", (ev) => {
+      if (ev.shiftKey && anchorKey !== null) selectRangeTo(rowKey(e));
+      else toggleRow(rowKey(e), check.checked);
+    });
+    // Shift-clicking otherwise drags a text selection across the rows it
+    // spans, which is both ugly and hard to clear.
+    check.addEventListener("mousedown", (ev) => {
+      if (ev.shiftKey) ev.preventDefault();
+    });
     checkTd.appendChild(check);
     tr.appendChild(checkTd);
 
@@ -2388,6 +2435,7 @@ function renderResults(result) {
   // brief calls for selection to survive re-sorting and re-filtering,
   // which it does for every row that is still there.
   selectedTags = new Set([...selectedTags].filter((t) => renderedByTag.has(t)));
+  if (anchorKey !== null && !renderedByTag.has(anchorKey)) anchorKey = null;
   updateSelectionUi();
 }
 
