@@ -291,3 +291,53 @@ def test_the_frontend_keys_rows_on_more_than_the_tag():
     assert "function rowKey(e)" in app_js
     assert "e.is_custom ? `c:${e.custom_index}`" in app_js
     assert "dataset.tag" not in app_js, "a tag-keyed row lookup came back"
+
+
+# ---------- dialogs the app has to draw itself ----------
+
+
+def _app_js() -> str:
+    from afp.web.app import STATIC_DIR
+
+    return (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+
+
+def test_no_native_browser_dialogs_are_used():
+    """window.confirm and window.alert do not work in this app.
+    pywebview's Edge WebView2 backend suppresses native JS dialogs, so
+    confirm() returned false immediately without anyone being asked --
+    deleting a custom entry appeared to do nothing at all -- and alert()
+    reported import failures to nobody.
+
+    Neither failed loudly, which is why this is pinned rather than left
+    to be noticed again.
+    """
+    import re
+
+    # Comments stripped first: the explanation of why these are banned
+    # names them, and matching prose would make this unfixable.
+    code = " ".join(line.split("//", 1)[0] for line in _app_js().splitlines())
+    # A method call such as askConfirm(...) is fine; the bare global is not.
+    for name in ("confirm", "alert", "prompt"):
+        hits = re.findall(rf"(?<![A-Za-z0-9_.]){name}\s*\(", code)
+        assert not hits, f"{name}() is unusable in this app -- use askConfirm/showMessage"
+
+
+def test_deleting_asks_before_it_destroys_anything():
+    """The one action here that cannot be undone. Copy deliberately does
+    not ask; this does.
+    """
+    js = _app_js()
+    body = js.split("async function deleteCustomEntries(", 1)[1].split("\n}", 1)[0]
+    assert "await askConfirm(" in body
+    assert "if (!ok) return;" in body
+
+
+def test_the_confirmation_does_not_focus_the_destructive_button():
+    """Enter should not complete something irreversible the user has
+    not read yet.
+    """
+    js = _app_js()
+    body = js.split("function askConfirm(", 1)[1].split("\n}", 1)[0]
+    assert "cancel.focus();" in body
+    assert "go.focus()" not in body

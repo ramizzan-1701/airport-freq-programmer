@@ -1426,7 +1426,10 @@ async function importCustomEntriesFile(file) {
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    alert("Import failed: " + (body.detail || "the file couldn't be read as a YCE-46 export."));
+    await showMessage(
+      "Import failed",
+      body.detail || "The file couldn't be read as a YCE-46 export.",
+    );
     return;
   }
   const body = await res.json();
@@ -2037,6 +2040,82 @@ function flashGroupsNote(text) {
 
 
 
+
+// ---------- confirmations the app draws itself ----------
+//
+// window.confirm and window.alert are not usable in this app. The Edge
+// WebView2 backend pywebview uses on Windows suppresses native JS
+// dialogs, so confirm() returned false immediately without the user
+// ever being asked -- the action was correctly cancelled, but nobody
+// had cancelled it. alert() went the same way, silently: an import
+// failure reported nothing at all.
+//
+// Both are replaced by the modal the rest of the app already uses.
+
+/** Resolves true if the user confirms, false on cancel, Escape or an
+ * outside click. */
+function askConfirm({ title, message, confirmLabel = "Confirm", danger = false }) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById("confirm-modal");
+    const box = modal.querySelector(".modal-box");
+    box.innerHTML = "";
+    box.appendChild(modalHeader(title));
+
+    const body = document.createElement("div");
+    body.className = "modal-scroll confirm-body";
+    body.textContent = message;
+    box.appendChild(body);
+
+    let settled = false;
+    const finish = (answer) => {
+      if (settled) return; // a double-fire must not resolve twice
+      settled = true;
+      modal.classList.add("hidden");
+      document.removeEventListener("keydown", onKeydown);
+      modal.removeEventListener("click", onBackdrop);
+      resolve(answer);
+    };
+    function onKeydown(event) {
+      if (event.key === "Escape") finish(false);
+    }
+    function onBackdrop(event) {
+      if (event.target === modal) finish(false);
+    }
+
+    const footer = document.createElement("div");
+    footer.className = "modal-footer";
+    const actions = document.createElement("div");
+    actions.className = "modal-actions";
+
+    const cancel = document.createElement("button");
+    cancel.className = "btn";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", () => finish(false));
+
+    const go = document.createElement("button");
+    go.className = "btn btn-primary" + (danger ? " btn-danger" : "");
+    go.textContent = confirmLabel;
+    go.addEventListener("click", () => finish(true));
+
+    actions.append(cancel, go);
+    footer.appendChild(actions);
+    box.appendChild(footer);
+
+    document.addEventListener("keydown", onKeydown);
+    modal.addEventListener("click", onBackdrop);
+    modal.classList.remove("hidden");
+    // Cancel takes focus, not the destructive button: Enter should not
+    // complete something irreversible the user has not read yet.
+    cancel.focus();
+  });
+}
+
+/** A notice with nothing to decide. */
+function showMessage(title, message) {
+  return askConfirm({ title, message, confirmLabel: "OK" });
+}
+
+
 // ---------- row selection and the copy menu ----------
 //
 // Rows are picked with checkboxes and acted on from a right-click menu.
@@ -2207,9 +2286,15 @@ async function copySelectionTo(offset, entries) {
 
 async function deleteCustomEntries(entries) {
   const n = entries.length;
-  if (!confirm(`Delete ${n} custom ${n === 1 ? "entry" : "entries"}? This cannot be undone.`)) {
-    return;
-  }
+  const ok = await askConfirm({
+    title: `Delete ${n} custom ${n === 1 ? "entry" : "entries"}?`,
+    message:
+      "These were preserved from your radio or copied in here. Deleting them " +
+      "removes them from every future export. This cannot be undone.",
+    confirmLabel: "Delete",
+    danger: true,
+  });
+  if (!ok) return;
   // Highest index first, so each removal cannot shift the next one.
   const indexes = entries.map((e) => e.custom_index).sort((a, b) => b - a);
   for (const i of indexes) {

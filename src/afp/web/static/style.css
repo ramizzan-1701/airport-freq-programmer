@@ -1209,3 +1209,15 @@ main#app > .workspace,
 .row-menu-unnamed { color: var(--ink3); font-style: italic; }
 .row-menu-sep { height: 1px; background: var(--line2); margin: 5px 0; }
 .row-menu-danger:hover { color: var(--warn); }
+
+/* ---------- self-drawn confirmations ---------- */
+.confirm-body {
+  padding: 16px 24px 18px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink2);
+}
+/* The irreversible one. Distinct from the primary action so a
+   destructive button is never the one that just looks default. */
+.btn-danger { background: var(--warn); border-color: var(--warn); color: #140C0C; }
+.btn-danger:hover { filter: brightness(1.08); }
