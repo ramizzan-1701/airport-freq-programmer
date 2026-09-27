@@ -703,11 +703,21 @@ main#app > .workspace,
 /* Sized so the fixed-width columns still hold their content at the
    1000px minimum window, where the percentages are tightest: a Group
    pill and the "Frequency" header both wrapped at 8%/11%. */
-.results-table th:nth-child(1), .results-table td:nth-child(1) { width: 17%; }  /* Tag */
-.results-table th:nth-child(2), .results-table td:nth-child(2) { width: 14%; }  /* Frequency */
-.results-table th:nth-child(3), .results-table td:nth-child(3) { width: 10%; }  /* Group */
-.results-table th:nth-child(4), .results-table td:nth-child(4) { width: 35%; }  /* Airport */
-.results-table th:nth-child(5), .results-table td:nth-child(5) { width: 24%; }  /* City, State */
+/* Keyed on position, so adding a column means shifting every one of
+   these. The selection column was added in front of Tag without doing
+   that, which slid every width one place to the right: the checkbox
+   column took Tag's 17%, Group took Airport's 35%, and City/State fell
+   off the end and got whatever was left.
+
+   Airport is deliberately left without a width. Under table-layout:
+   fixed an unsized column absorbs the remainder, which lets the
+   selection column be an exact pixel width without the percentages
+   having to add up around it. */
+.results-table th:nth-child(1), .results-table td:nth-child(1) { width: 30px; }  /* select */
+.results-table th:nth-child(2), .results-table td:nth-child(2) { width: 17%; }  /* Tag */
+.results-table th:nth-child(3), .results-table td:nth-child(3) { width: 14%; }  /* Frequency */
+.results-table th:nth-child(4), .results-table td:nth-child(4) { width: 10%; }  /* Group */
+.results-table th:nth-child(6), .results-table td:nth-child(6) { width: 24%; }  /* City, State */
 
 .results-table th { white-space: nowrap; }
 
@@ -1152,7 +1162,10 @@ main#app > .workspace,
 }
 
 /* ---------- row selection ---------- */
-.col-select { width: 34px; text-align: center; padding-left: 14px !important; padding-right: 0 !important; }
+/* Left-aligned, and only as wide as the control in it: a checkbox
+   centred in a wide column reads as belonging to neither the edge of
+   the table nor the row it ticks. */
+.col-select { text-align: left; padding-left: 2px !important; padding-right: 0 !important; }
 .col-select input[type="checkbox"] {
   width: 14px;
   height: 14px;

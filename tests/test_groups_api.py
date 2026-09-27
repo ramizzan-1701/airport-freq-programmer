@@ -341,3 +341,46 @@ def test_the_confirmation_does_not_focus_the_destructive_button():
     body = js.split("function askConfirm(", 1)[1].split("\n}", 1)[0]
     assert "cancel.focus();" in body
     assert "go.focus()" not in body
+
+
+def test_every_results_column_is_accounted_for_by_a_width_rule():
+    """The column widths are keyed on nth-child, so adding a column
+    shifts every rule after it one place to the right -- silently. That
+    is how the selection column ended up 17% wide (Tag's share), Group
+    took Airport's 35%, and City/State lost its rule entirely.
+
+    Exactly one column is deliberately unsized: under table-layout fixed
+    it absorbs the remainder, which lets the selection column be an
+    exact pixel width without the percentages having to sum around it.
+    """
+    import re
+
+    from afp.web.app import STATIC_DIR
+
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    header = html.split('<table class="results-table">', 1)[1].split("</thead>", 1)[0]
+    columns = len(re.findall(r"<th\b", header))
+
+    css = (STATIC_DIR / "style.css").read_text(encoding="utf-8")
+    sized = {
+        int(n)
+        for n in re.findall(r"\.results-table th:nth-child\((\d+)\)", css)
+    }
+    missing = set(range(1, columns + 1)) - sized
+    assert len(missing) == 1, (
+        f"{columns} columns, width rules for {sorted(sized)} -- "
+        f"expected exactly one unsized, got {sorted(missing)}"
+    )
+    assert max(sized) <= columns, "a width rule points past the last column"
+
+
+def test_the_selection_column_is_narrow_and_left_aligned():
+    """It holds one checkbox. Centred in a wide column it reads as
+    belonging to neither the table edge nor the row it ticks.
+    """
+    from afp.web.app import STATIC_DIR
+
+    css = (STATIC_DIR / "style.css").read_text(encoding="utf-8")
+    rule = css.split(".col-select {", 1)[1].split("}", 1)[0]
+    assert "text-align: left" in rule
+    assert "text-align: center" not in rule
