@@ -7,7 +7,7 @@ constant is present wherever the package itself is. pyproject reads it
 from here, so there is one number to change.
 """
 
-__version__ = "0.11.0"
+__version__ = "0.12.9"
 
 # Bumped with __version__, shown on the About screen.
 RELEASE_DATE = "2026-09-27"
