@@ -1932,18 +1932,26 @@ function renderGroupsBar() {
   bar.classList.toggle("hidden", !groupsState);
   if (!groupsState) return;
 
+  // Two rows, each on one line. What the app names and what you name
+  // are different decisions, and wrapping them into each other made the
+  // second look like a continuation of the first.
+  const schemeRow = document.createElement("div");
+  schemeRow.className = "groups-row";
+  const customRow = document.createElement("div");
+  customRow.className = "groups-row";
+
   const kicker = document.createElement("span");
   kicker.className = "groups-kicker";
   kicker.textContent = "Memory groups";
-  bar.appendChild(kicker);
-  bar.appendChild(helpIcon(
+  schemeRow.appendChild(kicker);
+  schemeRow.appendChild(helpIcon(
     "The 6 app groups are named by the scheme you pick here. The 3 custom " +
     "groups are yours -- name them, then right-click rows to copy frequencies in. " +
     "All 9 names are written into the XML, so nothing needs renaming in YCE-46."
   ));
 
-  // Scheme choice. A segmented pair rather than a dropdown: there are
-  // two options and both fit, so hiding one behind a click buys nothing.
+  // Segmented pair rather than a dropdown: two options and both fit, so
+  // hiding one behind a click buys nothing.
   const seg = document.createElement("div");
   seg.className = "seg";
   for (const name of Object.keys(groupsState.schemes)) {
@@ -1955,17 +1963,20 @@ function renderGroupsBar() {
     btn.addEventListener("click", () => setScheme(name));
     seg.appendChild(btn);
   }
-  bar.appendChild(seg);
+  schemeRow.appendChild(seg);
 
+  // The one thing allowed to shrink: it is a preview of names shown in
+  // full on the rows below, so an ellipsis here costs nothing.
   const presets = document.createElement("span");
   presets.className = "groups-preview";
   presets.textContent = groupsState.preset_names.join("  ");
-  bar.appendChild(presets);
+  presets.title = presets.textContent;
+  schemeRow.appendChild(presets);
 
   const customLabel = document.createElement("span");
-  customLabel.className = "groups-kicker groups-custom-label";
+  customLabel.className = "groups-kicker";
   customLabel.textContent = "Your groups";
-  bar.appendChild(customLabel);
+  customRow.appendChild(customLabel);
 
   groupsState.custom_slots.forEach((slot, offset) => {
     const wrap = document.createElement("span");
@@ -1992,8 +2003,10 @@ function renderGroupsBar() {
       count.textContent = slot.entry_count;
       wrap.appendChild(count);
     }
-    bar.appendChild(wrap);
+    customRow.appendChild(wrap);
   });
+
+  bar.append(schemeRow, customRow);
 }
 
 async function setScheme(scheme) {
@@ -2031,7 +2044,8 @@ async function renameSlot(offset, name) {
 
 function flashGroupsNote(text) {
   const bar = document.getElementById("groups-bar");
-  const note = document.createElement("span");
+  bar.querySelectorAll(".groups-note").forEach((n) => n.remove());
+  const note = document.createElement("div");
   note.className = "groups-note";
   note.textContent = text;
   bar.appendChild(note);

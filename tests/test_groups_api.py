@@ -384,3 +384,38 @@ def test_the_selection_column_is_narrow_and_left_aligned():
     rule = css.split(".col-select {", 1)[1].split("}", 1)[0]
     assert "text-align: left" in rule
     assert "text-align: center" not in rule
+
+
+def test_the_groups_bar_is_two_rows_that_do_not_wrap():
+    """What the app names and what you name are separate decisions.
+    Wrapped into one flex row they ran together, and the second read as
+    a continuation of the first.
+    """
+    from afp.web.app import STATIC_DIR
+
+    css = (STATIC_DIR / "style.css").read_text(encoding="utf-8")
+    bar = css.split(".groups-bar {", 1)[1].split("}", 1)[0]
+    assert "flex-direction: column" in bar
+    assert "flex-wrap: wrap" not in bar
+
+    row = css.split(".groups-row {", 1)[1].split("}", 1)[0]
+    assert "flex-wrap: nowrap" in row
+
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    assert app_js.count('className = "groups-row"') == 2
+
+
+def test_only_the_name_preview_gives_way_when_space_is_short():
+    """It previews names listed in full on the row below, so an ellipsis
+    there costs nothing -- whereas a truncated label or a slot field the
+    user cannot reach does.
+    """
+    from afp.web.app import STATIC_DIR
+
+    css = (STATIC_DIR / "style.css").read_text(encoding="utf-8")
+    preview = css.split(".groups-preview {", 1)[1].split("}", 1)[0]
+    assert "text-overflow: ellipsis" in preview
+
+    for selector in (".groups-kicker {", ".slot-field {", ".seg {"):
+        rule = css.split(selector, 1)[1].split("}", 1)[0]
+        assert "flex: none" in rule, f"{selector} can be squeezed"

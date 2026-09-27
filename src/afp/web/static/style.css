@@ -1091,14 +1091,25 @@ main#app > .workspace,
 /* ---------- memory groups bar ---------- */
 .groups-bar {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
   padding: 10px 18px;
   border-bottom: 2px solid var(--line);
   background: var(--chrome);
 }
+/* One line each, no wrapping: the two rows are separate decisions, and
+   letting them wrap into each other made the second read as a
+   continuation of the first. */
+.groups-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 10px;
+  min-width: 0;
+}
 .groups-kicker {
+  flex: none;
+  white-space: nowrap;
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 10.5px;
@@ -1106,12 +1117,9 @@ main#app > .workspace,
   text-transform: uppercase;
   color: var(--ok);
 }
-/* Separated from the scheme half so the two halves read as two
-   different things: what the app names, and what you name. */
-.groups-custom-label { margin-left: 10px; padding-left: 14px; border-left: 1px solid var(--line); }
 
 /* Segmented choice rather than a dropdown: two options, both fit. */
-.seg { display: flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.seg { flex: none; display: flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .seg-btn {
   font-family: var(--font-display);
   font-weight: 600;
@@ -1127,14 +1135,19 @@ main#app > .workspace,
 .seg-btn:hover { color: var(--ink); }
 .seg-btn.on { background: var(--acc); color: #0C1014; }
 
+/* The only thing on its row allowed to give way. It previews names
+   that are listed in full elsewhere, so an ellipsis costs nothing. */
 .groups-preview {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--ink3);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
-.slot-field { display: inline-flex; align-items: center; gap: 6px; }
+.slot-field { flex: none; display: inline-flex; align-items: center; gap: 6px; }
 .slot-input {
   width: 104px;
   font-family: var(--font-mono);
@@ -1156,7 +1169,6 @@ main#app > .workspace,
 /* Transient, and it wraps to its own line rather than pushing the
    controls around as it appears and goes. */
 .groups-note {
-  flex-basis: 100%;
   font-size: 11.5px;
   color: var(--warn);
 }
