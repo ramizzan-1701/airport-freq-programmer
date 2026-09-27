@@ -1368,50 +1368,8 @@ function renderRadiusFilters(container) {
 async function loadCustomEntries() {
   const body = await (await api("/api/custom-entries")).json();
   customEntries = body.entries;
-  renderCustomBar();
 }
 
-function renderCustomBar() {
-  const bar = document.getElementById("custom-bar");
-  bar.innerHTML = "";
-
-  const title = document.createElement("span");
-  title.className = "custom-bar-title";
-  title.textContent = "Custom Frequencies (from your radio)";
-  bar.appendChild(title);
-
-  if (customEntries.length === 0) {
-    const meta = document.createElement("span");
-    meta.className = "muted";
-    meta.textContent = "None imported yet";
-    bar.appendChild(meta);
-
-    const actions = document.createElement("span");
-    actions.className = "custom-bar-actions";
-    const importBtn = document.createElement("button");
-    importBtn.className = "btn btn-small";
-    importBtn.textContent = "Import XML";
-    importBtn.addEventListener("click", () => document.getElementById("custom-import-input").click());
-    actions.appendChild(importBtn);
-    bar.appendChild(actions);
-    return;
-  }
-
-  const groupCount = new Set(customEntries.map((e) => e.group)).size;
-  const meta = document.createElement("span");
-  meta.className = "muted";
-  meta.textContent = `${customEntries.length} entries · ${groupCount} groups imported`;
-  bar.appendChild(meta);
-
-  const actions = document.createElement("span");
-  actions.className = "custom-bar-actions";
-  const openBtn = document.createElement("button");
-  openBtn.className = "btn btn-small";
-  openBtn.textContent = "Open";
-  openBtn.addEventListener("click", openCustomEntriesModal);
-  actions.appendChild(openBtn);
-  bar.appendChild(actions);
-}
 
 async function importCustomEntriesFile(file) {
   const res = await api("/api/custom-entries/import", {
@@ -1433,125 +1391,34 @@ async function importCustomEntriesFile(file) {
     return;
   }
   const body = await res.json();
+  const kept = body.entries.length - customEntries.length;
   customEntries = body.entries;
-  renderCustomBar();
-  // Show what actually came in. An import silently returning to the main
-  // page gives no confirmation of *which* entries were kept -- and the
-  // split matters here, since everything in the 6 generated group names
-  // is discarded on the way in.
-  openCustomEntriesModal();
+  await loadGroups();
   await runQuery();
+
+  // An import that returns silently gives no confirmation of *which*
+  // entries were kept, and the split matters: everything filed under one
+  // of the app's own group names is discarded on the way in, so a file
+  // made entirely of those keeps nothing at all. That case used to be
+  // explained by a modal; without one it would look like the import
+  // simply did nothing.
+  if (body.entries.length === 0) {
+    flashGroupsNote(
+      "Nothing was kept from that file. Every entry in it used one of the " +
+      "group names this app generates, so they count as previously generated " +
+      "entries -- they will be recreated when you generate. Only entries in " +
+      "your own group names are kept."
+    );
+  } else {
+    const groups = new Set(body.entries.map((e) => e.group)).size;
+    flashGroupsNote(
+      `Imported ${body.entries.length} ${body.entries.length === 1 ? "entry" : "entries"} ` +
+      `across ${groups} ${groups === 1 ? "group" : "groups"}.` +
+      (kept < 0 ? " This replaced what was held before." : "")
+    );
+  }
 }
 
-async function removeCustomEntry(index) {
-  const body = await (await api(`/api/custom-entries/${index}`, { method: "DELETE" })).json();
-  customEntries = body.entries;
-  renderCustomBar();
-  if (!document.getElementById("custom-entries-modal").classList.contains("hidden")) {
-    openCustomEntriesModal();
-  }
-  await runQuery();
-}
-
-async function clearCustomEntries() {
-  const body = await (await api("/api/custom-entries/clear", { method: "POST" })).json();
-  customEntries = body.entries;
-  renderCustomBar();
-  document.getElementById("custom-entries-modal").classList.add("hidden");
-  await runQuery();
-}
-
-function openCustomEntriesModal() {
-  const modal = document.getElementById("custom-entries-modal");
-  const box = modal.querySelector(".modal-box");
-  box.innerHTML = "";
-
-  const groupCount = new Set(customEntries.map((e) => e.group)).size;
-  // Subtitle worded identically to the compact bar's summary -- same
-  // facts, and two phrasings for one thing read as two different things.
-  box.appendChild(modalHeader(
-    "Custom Frequencies (from your radio)",
-    `${customEntries.length} entries · ${groupCount} groups imported`,
-  ));
-
-  const scroll = document.createElement("div");
-  scroll.className = "modal-scroll";
-
-  if (customEntries.length === 0) {
-    // Reachable right after an import: a file whose every entry sat in
-    // one of the 6 generated group names has all of it discarded, which
-    // otherwise shows up as an empty table with no explanation.
-    const empty = document.createElement("p");
-    empty.className = "modal-empty";
-    empty.textContent = "No custom frequencies were kept from that file.";
-    scroll.appendChild(empty);
-    const why = document.createElement("p");
-    why.className = "modal-note";
-    why.textContent = "Every entry in it used one of the 6 group names this app generates, so they were treated as previously generated entries and discarded -- they'll be recreated when you generate. Only entries in your own group names are kept here.";
-    scroll.appendChild(why);
-  }
-
-  const table = document.createElement("table");
-  const thead = document.createElement("thead");
-  thead.innerHTML = "<tr><th>Tag</th><th>Frequency</th><th>Group</th><th>Position</th><th></th></tr>";
-  table.appendChild(thead);
-  const tbody = document.createElement("tbody");
-  for (const e of customEntries) {
-    const tr = document.createElement("tr");
-    tr.appendChild(cell("cell-tag", e.tag_name));
-    tr.appendChild(cell("cell-freq", e.freq_mhz.toFixed(3)));
-
-    // Green marks the one concept it's reserved for: entries that came
-    // off the radio rather than from FAA data.
-    const groupTd = document.createElement("td");
-    const pill = document.createElement("span");
-    pill.className = "group-pill custom";
-    pill.textContent = e.group;
-    groupTd.appendChild(pill);
-    tr.appendChild(groupTd);
-
-    tr.appendChild(cell("cell-pos", `${e.lat.toFixed(3)}, ${e.lon.toFixed(3)}`));
-
-    const removeTd = document.createElement("td");
-    const removeBtn = document.createElement("button");
-    removeBtn.className = "text-action";
-    removeBtn.textContent = "✕ remove";
-    removeBtn.addEventListener("click", () => removeCustomEntry(e.index));
-    removeTd.appendChild(removeBtn);
-    tr.appendChild(removeTd);
-    tbody.appendChild(tr);
-  }
-  table.appendChild(tbody);
-
-  // Only alongside actual rows -- a bare header row reads as a broken
-  // table.
-  if (customEntries.length > 0) {
-    scroll.appendChild(table);
-  }
-  box.appendChild(scroll);
-
-  const footer = document.createElement("div");
-  footer.className = "modal-footer";
-  const actionsRow = document.createElement("div");
-  actionsRow.className = "modal-actions";
-  const clearBtn = document.createElement("button");
-  clearBtn.className = "btn";
-  clearBtn.textContent = "Clear imported data";
-  clearBtn.addEventListener("click", clearCustomEntries);
-  const reimportBtn = document.createElement("button");
-  reimportBtn.className = "btn";
-  reimportBtn.textContent = "Re-import";
-  reimportBtn.addEventListener("click", () => document.getElementById("custom-import-input").click());
-  const closeBtn = document.createElement("button");
-  closeBtn.className = "btn";
-  closeBtn.textContent = "Close";
-  closeBtn.addEventListener("click", () => modal.classList.add("hidden"));
-  actionsRow.append(clearBtn, reimportBtn, closeBtn);
-  footer.appendChild(actionsRow);
-  box.appendChild(footer);
-
-  modal.classList.remove("hidden");
-}
 
 function showBlockedImportModal({ groups, found, available }) {
   const modal = document.getElementById("blocked-import-modal");
@@ -1932,51 +1799,24 @@ function renderGroupsBar() {
   bar.classList.toggle("hidden", !groupsState);
   if (!groupsState) return;
 
-  // Two rows, each on one line. What the app names and what you name
-  // are different decisions, and wrapping them into each other made the
-  // second look like a continuation of the first.
-  const schemeRow = document.createElement("div");
-  schemeRow.className = "groups-row";
-  const customRow = document.createElement("div");
-  customRow.className = "groups-row";
+  // Two rows, each answering the same question about a different half
+  // of the radio's nine slots: who names these. Yours first, because
+  // your entries are the first rows in the results below.
+  const yours = document.createElement("div");
+  yours.className = "groups-row";
+  const app = document.createElement("div");
+  app.className = "groups-row";
 
-  const kicker = document.createElement("span");
-  kicker.className = "groups-kicker";
-  kicker.textContent = "Memory groups";
-  schemeRow.appendChild(kicker);
-  schemeRow.appendChild(helpIcon(
-    "The 6 app groups are named by the scheme you pick here. The 3 custom " +
-    "groups are yours -- name them, then right-click rows to copy frequencies in. " +
-    "All 9 names are written into the XML, so nothing needs renaming in YCE-46."
+  const yoursLabel = document.createElement("span");
+  yoursLabel.className = "groups-kicker";
+  yoursLabel.textContent = "Your groups";
+  yours.appendChild(yoursLabel);
+  yours.appendChild(helpIcon(
+    "Three slots that are yours to name. Right-click rows in the table to " +
+    "copy frequencies into one, or import your radio's own export to bring " +
+    "its groups in. All nine group names are written into the XML, so " +
+    "nothing needs renaming in YCE-46."
   ));
-
-  // Segmented pair rather than a dropdown: two options and both fit, so
-  // hiding one behind a click buys nothing.
-  const seg = document.createElement("div");
-  seg.className = "seg";
-  for (const name of Object.keys(groupsState.schemes)) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "seg-btn" + (name === groupsState.scheme ? " on" : "");
-    btn.textContent = SCHEME_LABELS[name] || name;
-    btn.title = groupsState.schemes[name].join("  ");
-    btn.addEventListener("click", () => setScheme(name));
-    seg.appendChild(btn);
-  }
-  schemeRow.appendChild(seg);
-
-  // The one thing allowed to shrink: it is a preview of names shown in
-  // full on the rows below, so an ellipsis here costs nothing.
-  const presets = document.createElement("span");
-  presets.className = "groups-preview";
-  presets.textContent = groupsState.preset_names.join("  ");
-  presets.title = presets.textContent;
-  schemeRow.appendChild(presets);
-
-  const customLabel = document.createElement("span");
-  customLabel.className = "groups-kicker";
-  customLabel.textContent = "Your groups";
-  customRow.appendChild(customLabel);
 
   groupsState.custom_slots.forEach((slot, offset) => {
     const wrap = document.createElement("span");
@@ -2003,10 +1843,59 @@ function renderGroupsBar() {
       count.textContent = slot.entry_count;
       wrap.appendChild(count);
     }
-    customRow.appendChild(wrap);
+    yours.appendChild(wrap);
   });
 
-  bar.append(schemeRow, customRow);
+  // Pushed right, against the import that is the other way of filling
+  // these slots.
+  // Counts what is held, not what was imported: these slots fill by
+  // copying rows in as well, so "imported" would misdescribe half of
+  // the ways an entry gets here.
+  const held = document.createElement("span");
+  held.className = "groups-held";
+  held.textContent = customEntries.length
+    ? `${customEntries.length} ${customEntries.length === 1 ? "entry" : "entries"} held`
+    : "No entries yet";
+  yours.appendChild(held);
+
+  const importBtn = document.createElement("button");
+  importBtn.className = "btn btn-small";
+  importBtn.textContent = "Import XML";
+  importBtn.title = "Read a memory-book export from your radio and keep its own groups";
+  importBtn.addEventListener("click", () =>
+    document.getElementById("custom-import-input").click()
+  );
+  yours.appendChild(importBtn);
+
+  const appLabel = document.createElement("span");
+  appLabel.className = "groups-kicker";
+  appLabel.textContent = "App groups";
+  app.appendChild(appLabel);
+
+  // Segmented pair rather than a dropdown: two options and both fit, so
+  // hiding one behind a click buys nothing.
+  const seg = document.createElement("div");
+  seg.className = "seg";
+  for (const name of Object.keys(groupsState.schemes)) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "seg-btn" + (name === groupsState.scheme ? " on" : "");
+    btn.textContent = SCHEME_LABELS[name] || name;
+    btn.title = groupsState.schemes[name].join("  ");
+    btn.addEventListener("click", () => setScheme(name));
+    seg.appendChild(btn);
+  }
+  app.appendChild(seg);
+
+  // The one element allowed to give way: a preview of names that appear
+  // in full in the table's Group column, so an ellipsis costs nothing.
+  const presets = document.createElement("span");
+  presets.className = "groups-preview";
+  presets.textContent = groupsState.preset_names.join("  ");
+  presets.title = presets.textContent;
+  app.appendChild(presets);
+
+  bar.append(yours, app);
 }
 
 async function setScheme(scheme) {

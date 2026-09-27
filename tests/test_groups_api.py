@@ -419,3 +419,68 @@ def test_only_the_name_preview_gives_way_when_space_is_short():
     for selector in (".groups-kicker {", ".slot-field {", ".seg {"):
         rule = css.split(selector, 1)[1].split("}", 1)[0]
         assert "flex: none" in rule, f"{selector} can be squeezed"
+
+
+def _memo(tag: str, group: str) -> str:
+    return (
+        f"<MEMORY_BOOK_GROUP><TAG_NAME>{tag}</TAG_NAME>"
+        "<FREQUENCY>122.800</FREQUENCY>"
+        f"<GROUP>{group}</GROUP>"
+        "<POSITION><LAT>37\u00b030.000</LAT><NS>N</NS>"
+        "<LON>122\u00b06.000</LON><EW>W</EW></POSITION>"
+        "<SCAN_MEMORY>Off</SCAN_MEMORY><SHIFT>Off</SHIFT></MEMORY_BOOK_GROUP>"
+    )
+
+
+def _book(*memos: str) -> bytes:
+    body = (
+        '<?xml version="1.0" encoding="utf-8" standalone="yes"?>'
+        "<FILE><MEMORY_BOOK>" + "".join(memos) + "</MEMORY_BOOK></FILE>"
+    )
+    return b"\xef\xbb\xbf" + body.encode("utf-8")
+
+
+def test_imported_groups_take_slots(client):
+    """Found by importing in the running app. An import brings its own
+    group names, and a name with no slot is never written into <GROUPS>
+    -- so every one of those entries lands ungrouped on the radio while
+    the export succeeds and the file looks right.
+    """
+    client.post("/api/custom-entries/import",
+                content=_book(_memo("HOME-1", "Hangar"), _memo("TRIP-1", "Trips")))
+
+    slots = client.get("/api/groups").json()["custom_slots"]
+    assert [s["name"] for s in slots[:2]] == ["Hangar", "Trips"]
+    assert [s["entry_count"] for s in slots[:2]] == [1, 1]
+
+
+def test_imported_groups_reach_the_export(client):
+    """The consequence the test above exists to prevent."""
+    client.post("/api/custom-entries/import",
+                content=_book(_memo("HOME-1", "Hangar")))
+
+    xml = client.post("/api/generate", json={}).content.decode("utf-8-sig")
+    block = xml[xml.index("<GROUPS>"): xml.index("</GROUPS>")]
+    assert "<GROUP index=\"6\">Hangar</GROUP>" in block
+
+
+def test_reimporting_does_not_shuffle_a_group_to_another_slot(client):
+    """A group the user has been working with should stay where it is."""
+    client.post("/api/custom-entries/import",
+                content=_book(_memo("A", "Alpha"), _memo("B", "Bravo")))
+    client.post("/api/custom-entries/import",
+                content=_book(_memo("B", "Bravo"), _memo("C", "Charlie")))
+
+    names = [s["name"] for s in client.get("/api/groups").json()["custom_slots"]]
+    assert names[1] == "Bravo", "Bravo moved off its slot"
+    assert "Charlie" in names
+
+
+def test_an_import_that_keeps_nothing_leaves_no_slots_claimed(client):
+    """A file made entirely of app-generated group names keeps nothing,
+    so nothing should be seated either.
+    """
+    client.post("/api/custom-entries/import",
+                content=_book(_memo("X", "0-9"), _memo("Y", "A-E")))
+    slots = client.get("/api/groups").json()["custom_slots"]
+    assert all(s["name"] is None for s in slots)

@@ -137,7 +137,33 @@ class AppState:
         check_custom_group_capacity(custom)
         self.custom_entries = custom
         local_store.save_custom_entries(self.custom_entries_path, self.custom_entries)
+        self._seat_imported_groups()
         return self.custom_entries
+
+    def _seat_imported_groups(self) -> None:
+        """Puts the imported groups on the user's three slots.
+
+        An import replaces the held set wholesale, so it brings its own
+        group names with it -- and those names have to occupy slots or
+        they are never written into <GROUPS>, which lands every one of
+        those entries ungrouped on the radio. That is silent: the export
+        succeeds and the file looks right.
+
+        Slots a group already sits on are left where they are, so
+        re-importing does not shuffle a group the user has been working
+        with onto a different slot.
+        """
+        names = custom_group_names(self.custom_entries)
+        keep = [n if n in names else None for n in self.custom_slot_names]
+        for name in names:
+            if name in keep:
+                continue
+            try:
+                keep[keep.index(None)] = name
+            except ValueError:
+                break  # more groups than slots; the capacity check catches this
+        self.custom_slot_names = keep
+        self._save_groups()
 
     def remove_custom_entry(self, index: int) -> list[Entry]:
         del self.custom_entries[index]
