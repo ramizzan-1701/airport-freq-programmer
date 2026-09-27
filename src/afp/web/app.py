@@ -17,14 +17,19 @@ from pydantic import ValidationError
 
 from .. import RELEASE_DATE, __version__, about as about_copy, classification
 from ..counter import counter_status
-from ..custom_entries import CustomGroupCapacityError
+from ..custom_entries import CustomGroupCapacityError, custom_group_names
 from ..export.fta850l import FTA_850L
 from ..export.xml_reader import XmlParseError
 from ..export.xml_writer import ExportValidationError, build_xml
 from ..nasr.source import FetchResult
 from ..progress import FETCH_STEPS, LOAD_STEPS, Cancelled
 from ..query import query as query_mod
-from ..selection import ALPHABETICAL_GROUP_NAMES, orphan_tag_ids, select_entries
+from ..selection import (
+    ALPHABETICAL,
+    group_slots,
+    orphan_tag_ids,
+    select_entries,
+)
 from .models import (
     AboutActionOut,
     AboutFeatureOut,
@@ -95,8 +100,6 @@ def create_app(cache_dir: Path) -> FastAPI:
             airport_count=len(loaded.data.airports) if loaded else None,
             frequency_count=len(loaded.data.frequencies) if loaded else None,
             ils_count=len(loaded.data.ils) if loaded else None,
-            group_setup_acknowledged=state.group_setup_acknowledged,
-            fixed_group_names=sorted(ALPHABETICAL_GROUP_NAMES),
             about_acknowledged=state.about_acknowledged,
         )
 
@@ -459,8 +462,21 @@ def create_app(cache_dir: Path) -> FastAPI:
         # deduplicated against the freshly generated set (spec §5 step 9).
         entries = query_mod.filtered_entries(loaded.conn, filter_state, mode=body.mode) + state.custom_entries
 
+        # The file now declares the radio's group names itself, which is
+        # what retired the old "go and rename six groups in YCE-46 by
+        # hand first" step. Slots 0-5 are the active scheme's; 6-8 hold
+        # whatever custom groups the user's own entries occupy.
+        #
+        # Custom names are taken in sorted order for now, so the same set
+        # of groups always lands on the same slots. Remembering a group's
+        # slot across a rename belongs with the UI that does the
+        # renaming; until then there is nothing to remember it from, and
+        # the file is self-consistent either way because every name it
+        # uses is a name it defines.
+        slots = group_slots(ALPHABETICAL, custom_group_names(state.custom_entries))
+
         try:
-            xml_bytes = build_xml(entries, FTA_850L)
+            xml_bytes = build_xml(entries, FTA_850L, slots)
         except ExportValidationError as exc:
             raise HTTPException(status_code=422, detail={"problems": exc.problems}) from None
 
@@ -475,12 +491,6 @@ def create_app(cache_dir: Path) -> FastAPI:
     def acknowledge_about() -> StatusOut:
         state: AppState = app.state.afp_state
         state.acknowledge_about()
-        return status()
-
-    @app.post("/api/group-setup/acknowledge", response_model=StatusOut)
-    def acknowledge_group_setup() -> StatusOut:
-        state: AppState = app.state.afp_state
-        state.acknowledge_group_setup()
         return status()
 
     def _custom_entries_out(state: AppState) -> CustomEntriesOut:

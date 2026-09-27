@@ -42,11 +42,9 @@ class AppState:
         self.progress: ProgressTracker | None = None
 
         self.custom_entries_path = self.cache_dir / "custom_entries.json"
-        self.group_setup_path = self.cache_dir / "group_setup.json"
         self.about_path = self.cache_dir / "about.json"
         self.filters_path = self.cache_dir / "filters.json"
         self.custom_entries: list[Entry] = local_store.load_custom_entries(self.custom_entries_path)
-        self.group_setup_acknowledged: bool = local_store.load_group_setup_acknowledged(self.group_setup_path)
         # False on a fresh install, which is what makes the About screen
         # show itself once ahead of the load screen.
         self.about_acknowledged: bool = local_store.load_about_acknowledged(self.about_path)
@@ -127,10 +125,6 @@ class AppState:
     def clear_custom_entries(self) -> None:
         self.custom_entries = []
         local_store.save_custom_entries(self.custom_entries_path, self.custom_entries)
-
-    def acknowledge_group_setup(self) -> None:
-        self.group_setup_acknowledged = True
-        local_store.save_group_setup_acknowledged(self.group_setup_path, True)
 
     def load_saved_filters(self) -> dict | None:
         """Read from disk each time rather than caching in memory: the

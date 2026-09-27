@@ -183,7 +183,7 @@ def test_the_workflow_is_served_in_order(empty_client):
     body = empty_client.get("/api/about").json()
     assert body["workflow_intro"].startswith("Proper workflow")
     assert body["workflow_steps"] == list(about.WORKFLOW_STEPS)
-    assert len(body["workflow_steps"]) == 8
+    assert len(body["workflow_steps"]) == 7
 
 
 def test_every_workflow_steps_bold_markers_are_balanced():
@@ -196,12 +196,12 @@ def test_every_workflow_steps_bold_markers_are_balanced():
 
 
 def test_the_workflow_names_buttons_that_actually_exist():
-    """Steps 2 and 6 tell the reader to go and press something. If those
-    buttons get renamed again, the instructions become a scavenger hunt
-    -- so hold them against the markup rather than trusting memory.
+    """A step telling the reader to press something becomes a scavenger
+    hunt if that button is renamed, so hold the names against the markup
+    rather than trusting memory.
     """
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
-    labels = {"Groups setup help", "Generate FTA-850 XML"}
+    labels = {"Generate FTA-850 XML"}
     for label in labels:
         assert f">{label}<" in html, f"{label!r} is no longer a button in index.html"
 
@@ -248,47 +248,13 @@ def test_the_frontend_knows_every_action_the_copy_names():
 
 
 def test_the_workflow_actions_reach_the_frontend(empty_client):
+    """Empty since the app began declaring the group names in the export
+    itself: the one action opened the group-setup instructions, and there
+    is no setup left to do. The plumbing is still exercised so it does
+    not rot before the copy wants it again.
+    """
     body = empty_client.get("/api/about").json()
-    actions = {a["phrase"]: a["action"] for a in body["workflow_actions"]}
-    assert actions == {"GROUPS SETUP HELP": "group-setup"}
-
-
-def test_the_group_setup_modal_names_the_same_menu_as_the_workflow():
-    """Two screens describe the same YCE-46 menu: workflow step 2 and the
-    group-setup modal step 1. They drifted once already -- the modal was
-    still saying "Setup" after the workflow moved to "Memory Book" --
-    and a reader following stale directions finds nothing there.
-    """
-    menu = "Memory Book → Memory Group Name"
-    assert any(menu in step for step in about.WORKFLOW_STEPS), (
-        "no workflow step names this menu any more"
-    )
-    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
-    assert menu in app_js, "the group-setup modal names a different menu than the workflow"
-
-
-def test_the_group_setup_modal_links_the_same_yaesu_page_as_the_about_screen():
-    """Both screens point a reader at the programming software, and both
-    should land them on the same page. The group-setup modal can be
-    opened before /api/about has ever been fetched, so it carries its own
-    copy of the URL rather than reading one off the response -- which is
-    exactly the kind of duplicate that drifts silently.
-    """
-    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
-    declared = app_js.split("const YAESU_SOFTWARE_URL =", 1)[1].split(";", 1)[0]
-    url = declared.strip().strip('"')
-    assert url in dict(about.INTRO_LINKS).values(), (
-        "the group-setup modal links a different page than the About screen"
-    )
-
-
-def test_the_group_setup_modal_link_is_painted_like_the_others():
-    """Anchors are styled by .modal-box a. Scoped to .about-body -- where
-    this rule used to live -- the group-setup link rendered in the
-    browser's default blue on a dark panel, all but unreadable.
-    """
-    css = (STATIC_DIR / "style.css").read_text(encoding="utf-8")
-    assert ".modal-box a { color: var(--acc); }" in css
+    assert body["workflow_actions"] == []
 
 
 def test_the_about_modal_is_a_fixed_height():
@@ -299,26 +265,6 @@ def test_the_about_modal_is_a_fixed_height():
     """
     css = (STATIC_DIR / "style.css").read_text(encoding="utf-8")
     assert "#about-modal .modal-box { height:" in css
-
-
-def test_the_group_setup_modal_uses_the_arrow_glyph():
-    """Same convention as the workflow steps: the app writes menu paths
-    with the arrow character, not "->".
-    """
-    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
-    start = app_js.index("function appendGroupSetupInstructions")
-    instructions = app_js[start : app_js.index("\nfunction ", start + 1)]
-    assert "->" not in instructions, "an ASCII arrow crept into the group-setup instructions"
-
-
-def test_the_group_setup_modal_stacks_above_the_about_one():
-    """Step 2's link opens the group-setup modal over this one, so the
-    reader keeps their place in the workflow. Both backdrops share a
-    z-index, so the only thing deciding which wins is document order --
-    swap these two divs and the link would appear to do nothing.
-    """
-    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
-    assert html.index('id="about-modal"') < html.index('id="group-setup-modal"')
 
 
 def test_the_workflow_uses_the_arrow_glyph_not_an_ascii_arrow():

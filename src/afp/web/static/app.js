@@ -37,8 +37,6 @@ let cityOptions = [];
 const ILS_PSEUDO_CATEGORY = "ILS";
 
 let customEntries = [];
-let groupSetupAcknowledged = false;
-let fixedGroupNames = [];
 let aboutAcknowledged = false;
 
 // ---------- tooltips ----------
@@ -260,8 +258,6 @@ async function init() {
   initTooltips();
   const status = await (await api("/api/status")).json();
   renderCycleStatus(status);
-  groupSetupAcknowledged = status.group_setup_acknowledged;
-  fixedGroupNames = status.fixed_group_names;
   aboutAcknowledged = status.about_acknowledged;
 
   if (!status.loaded_cycle) {
@@ -282,7 +278,6 @@ async function init() {
   document.getElementById("fetch-btn").addEventListener("click", doFetch);
   document.getElementById("progress-cancel").addEventListener("click", cancelFetch);
   document.getElementById("about-link").addEventListener("click", () => showAboutModal());
-  document.getElementById("group-setup-link").addEventListener("click", () => showGroupSetupModal());
   document.getElementById("clear-filters").addEventListener("click", clearAllFilters);
   document.getElementById("custom-import-input").addEventListener("change", (e) => {
     const file = e.target.files[0];
@@ -1619,142 +1614,6 @@ function showBlockedImportModal({ groups, found, available }) {
  * single wall of text this wasn't getting read, which matters because a
  * wrong group name fails silently.
  */
-// Yaesu's product page for the programming software. Kept in step with
-// afp.about.INTRO_LINKS by a test -- the About screen links the same
-// page, and a reader who follows one and then the other should not land
-// somewhere different.
-const YAESU_SOFTWARE_URL =
-  "https://yaesu.com/product-detail.aspx?Model=FTA-850L&CatName=Portables";
-
-function appendGroupSetupInstructions(box) {
-  const scroll = document.createElement("div");
-  scroll.className = "modal-scroll";
-
-  // --- zone 1: why it matters ---
-  const why = document.createElement("div");
-  why.className = "setup-why";
-  const whyInner = document.createElement("div");
-  whyInner.className = "setup-why-inner";
-  const kicker = document.createElement("div");
-  kicker.className = "setup-kicker";
-  kicker.textContent = "Why this matters";
-  const whyText = document.createElement("p");
-  // Linked the same way the About screen links it, and to the same page.
-  // This modal can be opened before /api/about has ever been fetched --
-  // from the pre-generate gate on a fresh install -- so the URL is a
-  // local constant rather than read off aboutCopy.
-  appendLinkedText(
-    whyText,
-    "This app will sort frequencies into 6 alphabetized Groups for quick recall on your radio. The Yaesu YCE-46 Programming Software can't create or edit Group names on import - they must already exist there, or that group's frequencies will be dropped.",
-    [{ phrase: "YCE-46 Programming Software", url: YAESU_SOFTWARE_URL }],
-  );
-  const whyLead = document.createElement("p");
-  whyLead.className = "setup-lead";
-  whyLead.textContent = "There are 9 Group slots available. Rename 6 of them:";
-  whyInner.append(kicker, whyText, whyLead);
-  why.appendChild(whyInner);
-  scroll.appendChild(why);
-
-  // --- zone 2: the one thing to open ---
-  const step1 = document.createElement("div");
-  step1.className = "setup-step";
-  step1.appendChild(stepNumber("1"));
-  const step1Text = document.createElement("div");
-  step1Text.append(
-    document.createTextNode("Open the YCE-46 Software. Go to: "),
-    Object.assign(document.createElement("b"), { textContent: "Memory Book → Memory Group Name" }),
-    document.createTextNode("."),
-  );
-  step1.appendChild(step1Text);
-  scroll.appendChild(step1);
-
-  // --- zone 3: the name ledger ---
-  // Steps 2 and 3 sit where they apply rather than in a list above it:
-  // the names are the thing being acted on, so the instruction to rename
-  // them heads the table and the note about the leftovers closes it.
-  const ledger = document.createElement("div");
-  ledger.className = "ledger";
-
-  const ledgerHead = document.createElement("div");
-  ledgerHead.className = "ledger-head";
-  ledgerHead.appendChild(stepNumber("2"));
-  ledgerHead.appendChild(
-    Object.assign(document.createElement("div"), {
-      textContent: "Rename 6 of the 9 Groups to the following names - a one time setup",
-    }),
-  );
-  ledger.appendChild(ledgerHead);
-
-  const list = document.createElement("ul");
-  list.className = "group-name-list";
-  fixedGroupNames.forEach((name, i) => {
-    const li = document.createElement("li");
-    const slot = document.createElement("span");
-    slot.className = "slot-label";
-    slot.textContent = `GROUP ${i + 1}`;
-    const arrow = document.createElement("span");
-    arrow.className = "slot-arrow";
-    arrow.textContent = "→";
-    const label = document.createElement("span");
-    label.className = "slot-name";
-    label.textContent = name;
-    // Per-name rather than one bulk copy: these get pasted into six
-    // separate YCE-46 fields, so a single comma-joined string can't
-    // actually be used. Typing them is easy enough, but a mistyped name
-    // fails silently -- YCE-46 just drops that entry's grouping.
-    li.append(slot, arrow, label, copyNameButton(name));
-    list.appendChild(li);
-  });
-  ledger.appendChild(list);
-
-  const ledgerFoot = document.createElement("div");
-  ledgerFoot.className = "ledger-foot";
-  ledgerFoot.appendChild(stepNumber("3", true));
-  ledgerFoot.appendChild(
-    Object.assign(document.createElement("div"), {
-      textContent: "The remaining 3 Groups are yours - you can name them whatever you like for your own Custom frequencies.",
-    }),
-  );
-  ledger.appendChild(ledgerFoot);
-
-  scroll.appendChild(ledger);
-  box.appendChild(scroll);
-}
-
-function stepNumber(text, outline = false) {
-  const el = document.createElement("span");
-  el.className = "step-num" + (outline ? " outline" : "");
-  el.textContent = text;
-  return el;
-}
-
-
-function copyNameButton(name) {
-  const btn = document.createElement("button");
-  btn.className = "text-action copy-name";
-  btn.textContent = "⧉ copy";
-  btn.title = `Copy "${name}"`;
-  btn.setAttribute("aria-label", `Copy group name ${name}`);
-  btn.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(name);
-      btn.textContent = "✓ copied";
-    } catch {
-      // Clipboard access can be refused (permissions, insecure context).
-      // Say so rather than showing a success state for a copy that
-      // didn't happen -- the name is right there to type instead.
-      btn.textContent = "couldn't copy";
-    }
-    btn.disabled = true;
-    setTimeout(() => {
-      btn.textContent = "⧉ copy";
-      btn.disabled = false;
-    }, 1200);
-  });
-  return btn;
-}
-
-/** Reference view, opened from the topbar link -- read-only, no gate. */
 // ---------- about ----------
 //
 // The copy lives in afp/about.py and arrives over /api/about, the same
@@ -1943,7 +1802,6 @@ function appendWorkflowStep(el, text, actions) {
 
 /** What each action name in the copy actually opens. */
 const ABOUT_ACTIONS = {
-  "group-setup": showGroupSetupModal,
 };
 
 /** Appends `text`, turning any of `actions`' phrases into a button that
@@ -2016,29 +1874,6 @@ async function acknowledgeAbout() {
   }
 }
 
-function showGroupSetupModal() {
-  const modal = document.getElementById("group-setup-modal");
-  const box = modal.querySelector(".modal-box");
-  box.innerHTML = "";
-
-  box.appendChild(modalHeader("Rename your memory groups first"));
-  appendGroupSetupInstructions(box);
-
-  const footer = document.createElement("div");
-  footer.className = "modal-footer";
-  const actionsRow = document.createElement("div");
-  actionsRow.className = "modal-actions";
-  const closeBtn = document.createElement("button");
-  closeBtn.className = "btn btn-primary";
-  closeBtn.textContent = "Close";
-  closeBtn.addEventListener("click", () => modal.classList.add("hidden"));
-  actionsRow.append(closeBtn);
-  footer.appendChild(actionsRow);
-  box.appendChild(footer);
-
-  modal.classList.remove("hidden");
-}
-
 /** Pinned modal header. The body between this and the footer scrolls,
  * so the title and the buttons stay reachable at any window size. */
 function modalHeader(title, subtitle) {
@@ -2054,87 +1889,6 @@ function modalHeader(title, subtitle) {
     head.appendChild(sub);
   }
   return head;
-}
-
-/** Confirmation gate shown when "Generate XML" is clicked. Resolves true
- * to proceed with generation, false if the user cancels.
- *
- * This runs before generating rather than after downloading: renaming the
- * groups is a prerequisite for the file to import correctly, and getting
- * the reminder after the file is already saved is too late to act on.
- */
-function confirmGroupSetupBeforeGenerate() {
-  return new Promise((resolve) => {
-    const modal = document.getElementById("generate-confirm-modal");
-    const box = modal.querySelector(".modal-box");
-    box.innerHTML = "";
-
-    box.appendChild(modalHeader("Before you generate: check your memory groups"));
-    appendGroupSetupInstructions(box);
-
-    // Opt-out, not auto-dismiss: the gate keeps appearing until the user
-    // deliberately says they're done with it. The instructions stay
-    // reachable from the topbar's "Group setup instructions" button, so
-    // dismissing this loses nothing.
-    const footer = document.createElement("div");
-    footer.className = "modal-footer";
-    const suppressRow = document.createElement("div");
-    suppressRow.className = "suppress-row";
-    const suppressCb = document.createElement("input");
-    suppressCb.type = "checkbox";
-    suppressCb.id = "suppress-group-setup-gate";
-    const suppressLabel = document.createElement("label");
-    suppressLabel.htmlFor = suppressCb.id;
-    suppressLabel.append(suppressCb, document.createTextNode("Don't show this message again"));
-    suppressRow.appendChild(suppressLabel);
-    footer.appendChild(suppressRow);
-
-    let settled = false;
-    const finish = (proceed) => {
-      if (settled) return; // guard against a double-fire resolving twice
-      settled = true;
-      modal.classList.add("hidden");
-      document.removeEventListener("keydown", onKeydown);
-      resolve(proceed);
-    };
-
-    function onKeydown(event) {
-      if (event.key === "Escape") finish(false);
-    }
-
-    const actionsRow = document.createElement("div");
-    actionsRow.className = "modal-actions";
-
-    const cancelBtn = document.createElement("button");
-    cancelBtn.className = "btn";
-    cancelBtn.textContent = "Cancel";
-    cancelBtn.addEventListener("click", () => finish(false));
-
-    const proceedBtn = document.createElement("button");
-    proceedBtn.className = "btn btn-primary";
-    proceedBtn.textContent = "I Understand. Proceed";
-    proceedBtn.addEventListener("click", () => {
-      // Only persist when the user actually ticked the box. Proceeding
-      // on its own means "yes, this export" -- not "stop asking me".
-      if (suppressCb.checked) {
-        groupSetupAcknowledged = true;
-        api("/api/group-setup/acknowledge", { method: "POST" }).catch(() => {
-          // A failed save must never block the export the user just asked
-          // for -- worst case the gate reappears next time.
-          groupSetupAcknowledged = false;
-        });
-      }
-      finish(true);
-    });
-
-    actionsRow.append(cancelBtn, proceedBtn);
-    footer.appendChild(actionsRow);
-    box.appendChild(footer);
-
-    document.addEventListener("keydown", onKeydown);
-    modal.classList.remove("hidden");
-    proceedBtn.focus();
-  });
 }
 
 // ---------- query + results ----------
@@ -2307,12 +2061,6 @@ document.getElementById("generate-btn").addEventListener("click", async () => {
   const btn = document.getElementById("generate-btn");
   const errorsEl = document.getElementById("generate-errors");
   errorsEl.classList.add("hidden");
-
-  // Skipped once the user has ticked "Don't show this message again";
-  // the instructions stay available from the topbar button.
-  if (!groupSetupAcknowledged && !(await confirmGroupSetupBeforeGenerate())) {
-    return; // cancelled
-  }
 
   btn.disabled = true;
   try {

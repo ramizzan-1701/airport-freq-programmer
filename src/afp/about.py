@@ -75,8 +75,6 @@ WORKFLOW_INTRO = (
 
 WORKFLOW_STEPS: tuple[str, ...] = (
     "Open YCE-46. **Select: Transfer → Read From Radio.**",
-    "Select: **Memory Book → Memory Group Name.** Confirm 6 groups are "
-    "renamed. (see GROUPS SETUP HELP in this app)",
     "In YCE-46 Software: Go to **File → XML File → Save** to save your "
     "existing frequency list from your radio.",
     "Import the saved XML file into this app. It will import all your "
@@ -94,9 +92,14 @@ WORKFLOW_STEPS: tuple[str, ...] = (
 # describing a menu in YCE-46. The second element names an action the
 # frontend knows how to run -- the copy can't hold a function, and a URL
 # would be wrong for something that never leaves the page.
-WORKFLOW_ACTIONS: tuple[tuple[str, str], ...] = (
-    ("GROUPS SETUP HELP", "group-setup"),
-)
+#
+# Empty since the app began writing the group names into the export
+# itself. The only action there had ever been opened the group-setup
+# instructions, and there is no longer any setup to do: the file defines
+# the six group names on import, so nothing has to be renamed by hand in
+# YCE-46 first. The mechanism stays because the copy is likely to want
+# it again.
+WORKFLOW_ACTIONS: tuple[tuple[str, str], ...] = ()
 
 AUTHOR = "Ryan Ramirez"
 CONTACT_EMAIL = "ramizzan@gmail.com"

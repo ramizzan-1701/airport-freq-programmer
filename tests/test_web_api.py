@@ -504,20 +504,6 @@ def test_generate_requires_loaded_data(empty_client):
 # ---------- group setup ----------
 
 
-def test_status_defaults_to_group_setup_not_acknowledged(empty_client):
-    body = empty_client.get("/api/status").json()
-    assert body["group_setup_acknowledged"] is False
-    assert body["fixed_group_names"] == ["0-9", "A-E", "F-J", "K-O", "P-T", "U-Z"]
-
-
-def test_acknowledging_group_setup_persists(empty_client):
-    res = empty_client.post("/api/group-setup/acknowledge")
-    assert res.json()["group_setup_acknowledged"] is True
-
-    status = empty_client.get("/api/status").json()
-    assert status["group_setup_acknowledged"] is True
-
-
 # ---------- custom entries ----------
 
 

@@ -20,7 +20,9 @@ you whether the current selection fits on the radio before you generate anything
 - **Preserves your own entries.** Import your current radio export and any memories that
   aren't in the app's six generated groups are held aside and merged back into every
   future export, untouched.
-- **Generates** the YCE-46-compatible XML.
+- **Generates** the YCE-46-compatible XML, including a `<GROUPS>` block that names the
+  radio's memory groups on import -- so there is nothing to rename by hand in YCE-46
+  first.
 
 ## Running it
 
@@ -63,7 +65,7 @@ afp query --data-dir nasr_cache/2026-08-06 --state CA --freq-category CTAF --out
 ## Where your data lives
 
 The desktop app stores downloaded NASR cycles and its small JSON state (your custom
-entries, the group-setup acknowledgment) in a per-user directory, deliberately outside
+entries, your saved filters) in a per-user directory, deliberately outside
 the install location so it survives replacing the app:
 
 | Platform | Path |

@@ -29,18 +29,6 @@ def save_custom_entries(path: Path, entries: list[Entry]) -> None:
     )
 
 
-def load_group_setup_acknowledged(path: Path) -> bool:
-    if not path.exists():
-        return False
-    data = json.loads(path.read_text(encoding="utf-8"))
-    return bool(data.get("acknowledged", False))
-
-
-def save_group_setup_acknowledged(path: Path, acknowledged: bool) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"acknowledged": acknowledged}), encoding="utf-8")
-
-
 def load_about_acknowledged(path: Path) -> bool:
     if not path.exists():
         return False

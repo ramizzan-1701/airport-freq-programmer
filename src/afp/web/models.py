@@ -102,8 +102,6 @@ class StatusOut(BaseModel):
     airport_count: int | None = None
     frequency_count: int | None = None
     ils_count: int | None = None
-    group_setup_acknowledged: bool = False
-    fixed_group_names: list[str] = Field(default_factory=list)
     # False until the About screen has been dismissed once, which is what
     # makes it appear ahead of the load screen on a fresh install.
     about_acknowledged: bool = False
