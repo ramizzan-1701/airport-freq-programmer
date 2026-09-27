@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+from ..progress import ProgressTracker
 from . import cycle_store, downloader, scraper
 from .scraper import Cycle, REQUIRED_CATEGORIES
 
@@ -48,11 +49,22 @@ class NASRSource:
         last_processed = cycle_store.load_last_processed(self.cycle_store_path)
         return last_processed is None or current.effective_date > last_processed
 
-    def fetch_current_cycle(self, today: date | None = None) -> FetchResult:
+    def fetch_current_cycle(
+        self, today: date | None = None, progress: ProgressTracker | None = None
+    ) -> FetchResult:
         # `today` is injectable for the same reason get_current_cycle's is:
         # which cycle counts as current depends on the date, so a test that
         # can't pin it silently changes meaning as real time passes.
+        #
+        # `progress` is optional so the CLI and the tests are unaffected;
+        # when present it is also what makes the work cancellable, since
+        # its callbacks raise.
+        if progress:
+            progress.begin("cycle")
         cycle = self.get_current_cycle(today=today)
+
+        if progress:
+            progress.begin("links")
         subpage_html = scraper.fetch(cycle.subpage_url)
         links = scraper.parse_cycle_csv_links(subpage_html)
 
@@ -66,9 +78,19 @@ class NASRSource:
         cycle_dir = self.cache_dir / cycle.effective_date.isoformat()
         csv_paths: dict[str, Path] = {}
         for category in REQUIRED_CATEGORIES:
+            # The step keys are the category in lower case, which is what
+            # ties these three iterations to their own slices of the bar
+            # -- APT is 8 MB of the 10 and has to be weighted as such.
+            step = category.lower()
+            if progress:
+                progress.begin(step)
             zip_path = downloader.download_file(
-                links[category], cycle_dir / _ZIP_FILENAMES[category]
+                links[category],
+                cycle_dir / _ZIP_FILENAMES[category],
+                on_bytes=progress.bytes_received if progress else None,
             )
+            if progress:
+                progress.begin(f"{step}_extract")
             csv_paths[category] = downloader.extract_csv(
                 zip_path, _CSV_FILENAMES[category], cycle_dir
             )

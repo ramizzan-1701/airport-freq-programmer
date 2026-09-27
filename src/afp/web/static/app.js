@@ -280,6 +280,7 @@ async function init() {
   if (!aboutAcknowledged) showAboutModal({ firstRun: true });
 
   document.getElementById("fetch-btn").addEventListener("click", doFetch);
+  document.getElementById("progress-cancel").addEventListener("click", cancelFetch);
   document.getElementById("about-link").addEventListener("click", () => showAboutModal());
   document.getElementById("group-setup-link").addEventListener("click", () => showGroupSetupModal());
   document.getElementById("clear-filters").addEventListener("click", clearAllFilters);
@@ -346,36 +347,127 @@ function renderCycleList(cycles) {
   }
 }
 
-async function loadCycle(cycle) {
-  const res = await api("/api/load", { method: "POST", body: JSON.stringify({ cycle }) });
-  if (!res.ok) {
-    alert("Failed to load cycle " + cycle);
-    return;
-  }
-  const status = await res.json();
+// ---------- fetch / load progress ----------
+//
+// The server does the work in one blocking request and reports where it
+// has got to on a side channel. So this polls /api/fetch/progress
+// alongside the request rather than reading a stream out of it -- which
+// keeps the request's own success and failure behaviour exactly as it
+// was, and means a mid-flight error is still an HTTP error.
+
+const POLL_MS = 300;
+let pollTimer = null;
+
+function progressEls() {
+  return {
+    box: document.getElementById("progress"),
+    fill: document.getElementById("progress-fill"),
+    label: document.getElementById("progress-label"),
+    detail: document.getElementById("progress-detail"),
+    cancel: document.getElementById("progress-cancel"),
+  };
+}
+
+/** Shows the bar and starts polling. `cancellable` is false for loading
+ * a cached cycle: it is a second and a half of local work with nothing
+ * to interrupt, and a button that cannot be pressed in time is worse
+ * than no button. */
+function startProgress({ cancellable }) {
+  const els = progressEls();
+  els.fill.style.width = "0%";
+  els.label.textContent = "Starting...";
+  els.detail.textContent = "";
+  els.cancel.classList.toggle("hidden", !cancellable);
+  els.cancel.disabled = false;
+  els.cancel.textContent = "Cancel";
+  els.box.classList.remove("hidden");
+
+  // The tracker outlives the run that made it, so the first poll can
+  // land before the request has installed a new one and come back
+  // holding the *previous* run's finished snapshot -- which flashed the
+  // bar to 100% for one tick before it reset. Nothing is believed until
+  // a snapshot arrives that is not already finished.
+  let started = false;
+
+  const tick = async () => {
+    try {
+      const res = await api("/api/fetch/progress");
+      if (res.ok) {
+        const p = await res.json();
+        if (!p.done) started = true;
+        if (started) {
+          els.fill.style.width = `${Math.round(p.fraction * 100)}%`;
+          if (p.label) els.label.textContent = p.label;
+          els.detail.textContent = p.detail || "";
+        }
+      }
+    } catch {
+      // A dropped poll is not worth surfacing -- the request doing the
+      // real work reports the outcome, and the next tick recovers.
+    }
+    if (pollTimer !== null) pollTimer = setTimeout(tick, POLL_MS);
+  };
+  pollTimer = setTimeout(tick, 0);
+}
+
+function stopProgress() {
+  if (pollTimer !== null) clearTimeout(pollTimer);
+  pollTimer = null;
+  progressEls().box.classList.add("hidden");
+}
+
+async function cancelFetch() {
+  const els = progressEls();
+  els.cancel.disabled = true;
+  els.cancel.textContent = "Cancelling...";
+  // The flag is read between chunks, so the in-flight one still lands.
+  await api("/api/fetch/cancel", { method: "POST" }).catch(() => {});
+}
+
+/** Everything after a cycle is in memory, shared by both entry points. */
+async function enterWorkspace(status) {
   renderCycleStatus(status);
   document.getElementById("load-panel").classList.add("hidden");
   document.getElementById("workspace").classList.remove("hidden");
   await initWorkspace();
 }
 
+async function loadCycle(cycle) {
+  const statusEl = document.getElementById("fetch-status");
+  statusEl.textContent = "";
+  startProgress({ cancellable: false });
+  try {
+    const res = await api("/api/load", { method: "POST", body: JSON.stringify({ cycle }) });
+    if (!res.ok) {
+      statusEl.textContent = "Failed to load cycle " + cycle + ".";
+      return;
+    }
+    await enterWorkspace(await res.json());
+  } finally {
+    stopProgress();
+  }
+}
+
 async function doFetch() {
   const btn = document.getElementById("fetch-btn");
   const statusEl = document.getElementById("fetch-status");
   btn.disabled = true;
-  statusEl.textContent = "Downloading current NASR cycle from the FAA -- this can take a minute...";
+  statusEl.textContent = "";
+  startProgress({ cancellable: true });
   try {
     const res = await api("/api/fetch", { method: "POST" });
     if (!res.ok) {
-      statusEl.textContent = "Fetch failed. Check your connection and try again.";
+      // 409 is the cancel the user asked for, not a failure to report
+      // as one. Anything else is worth blaming the network for.
+      statusEl.textContent =
+        res.status === 409
+          ? "Fetch cancelled. Nothing was changed."
+          : "Fetch failed. Check your connection and try again.";
       return;
     }
-    const status = await res.json();
-    renderCycleStatus(status);
-    document.getElementById("load-panel").classList.add("hidden");
-    document.getElementById("workspace").classList.remove("hidden");
-    await initWorkspace();
+    await enterWorkspace(await res.json());
   } finally {
+    stopProgress();
     btn.disabled = false;
   }
 }

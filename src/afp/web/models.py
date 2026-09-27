@@ -78,6 +78,24 @@ class FilterStateIn(BaseModel):
         )
 
 
+class ProgressOut(BaseModel):
+    """A snapshot of the running fetch or load, polled a few times a
+    second. Every field is safe to read when nothing is running.
+    """
+
+    # 0..1. Weighted by measured cost, not by step count -- see
+    # afp.progress for why equal weighting would misinform.
+    fraction: float
+    # What is happening, e.g. "Downloading airport data".
+    label: str
+    # The moving part underneath it, e.g. "3.2 MB of 8.0 MB". Empty on
+    # steps that have no sub-progress to report.
+    detail: str = ""
+    done: bool = False
+    error: str | None = None
+    cancelled: bool = False
+
+
 class StatusOut(BaseModel):
     loaded_cycle: date | None
     available_cycles: list[date]

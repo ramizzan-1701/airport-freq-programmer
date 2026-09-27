@@ -22,6 +22,7 @@ from ..export.fta850l import FTA_850L
 from ..export.xml_reader import XmlParseError
 from ..export.xml_writer import ExportValidationError, build_xml
 from ..nasr.source import FetchResult
+from ..progress import FETCH_STEPS, LOAD_STEPS, Cancelled
 from ..query import query as query_mod
 from ..selection import FIXED_GROUP_NAMES, orphan_tag_ids, select_entries
 from .models import (
@@ -37,6 +38,7 @@ from .models import (
     FilterStateIn,
     FreqCategoryOption,
     LabeledOption,
+    ProgressOut,
     QueryResultOut,
     ResolvedCenterOut,
     StatusOut,
@@ -166,17 +168,69 @@ def create_app(cache_dir: Path) -> FastAPI:
         cycle_date = date.fromisoformat(body["cycle"])
         if cycle_date not in state.available_cycles():
             raise HTTPException(status_code=404, detail=f"cycle {cycle_date} not found in cache dir")
-        state.load_cycle(cycle_date)
+        tracker = state.begin_progress(LOAD_STEPS)
+        try:
+            state.load_cycle(cycle_date, progress=tracker)
+        except Exception as exc:
+            tracker.fail(str(exc))
+            raise
+        tracker.finish()
         return status()
 
+    # Left as a blocking request that returns the new status, exactly as
+    # before. Progress is a side channel -- see /api/fetch/progress --
+    # rather than a streamed response, so this endpoint's success and
+    # failure behaviour, and everything already relying on it, is
+    # unchanged. A streamed 200 could not report a mid-flight failure as
+    # an HTTP error any more.
     @app.post("/api/fetch", response_model=StatusOut)
     def fetch(mark_processed: bool = True) -> StatusOut:
         state: AppState = app.state.afp_state
-        result: FetchResult = state.source.fetch_current_cycle()
-        if mark_processed:
-            state.source.mark_processed(result.cycle)
-        state.load_cycle(result.cycle.effective_date)
+        tracker = state.begin_progress(FETCH_STEPS)
+        try:
+            result: FetchResult = state.source.fetch_current_cycle(progress=tracker)
+            if mark_processed:
+                state.source.mark_processed(result.cycle)
+            state.load_cycle(result.cycle.effective_date, progress=tracker)
+        except Cancelled:
+            # Asked for, not gone wrong. 409 rather than a 5xx so the
+            # frontend can tell the two apart without inspecting text.
+            raise HTTPException(status_code=409, detail="fetch cancelled")
+        except Exception as exc:
+            # Recorded on the tracker as well as raised: the last poll
+            # can land after this response, and finding a stale
+            # in-progress snapshot there would leave the bar frozen
+            # part-way with no explanation.
+            tracker.fail(str(exc))
+            raise
+        tracker.finish()
         return status()
+
+    @app.get("/api/fetch/progress", response_model=ProgressOut)
+    def fetch_progress() -> ProgressOut:
+        """Polled a few times a second while a fetch or load runs.
+
+        Served concurrently with the blocking POST above because
+        FastAPI runs sync endpoints in a threadpool -- the one holding
+        the fetch does not hold up this one.
+        """
+        state: AppState = app.state.afp_state
+        if state.progress is None:
+            return ProgressOut(fraction=0.0, label="", detail="", done=False)
+        return ProgressOut(**state.progress.snapshot())
+
+    @app.post("/api/fetch/cancel", response_model=ProgressOut)
+    def fetch_cancel() -> ProgressOut:
+        """Sets the flag the download loop checks between chunks.
+
+        Returns immediately -- the work stops on its own once the
+        in-flight chunk lands, and the POST that started it answers 409.
+        """
+        state: AppState = app.state.afp_state
+        if state.progress is None:
+            raise HTTPException(status_code=404, detail="nothing running")
+        state.progress.cancel()
+        return ProgressOut(**state.progress.snapshot())
 
     @app.get("/api/filter-options", response_model=FilterOptionsOut)
     def filter_options() -> FilterOptionsOut:

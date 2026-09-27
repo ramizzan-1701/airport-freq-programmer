@@ -32,6 +32,18 @@
           <div id="cycle-list" class="cycle-list"></div>
           <button id="fetch-btn" class="btn btn-primary">Fetch latest cycle</button>
           <p id="fetch-status"></p>
+
+          <!-- Shown while a fetch or a cached load runs. The label says
+               which step; the detail underneath carries the byte count,
+               which is the part that visibly moves on a slow line. -->
+          <div id="progress" class="progress hidden">
+            <div class="progress-bar"><span id="progress-fill"></span></div>
+            <div class="progress-text">
+              <span id="progress-label"></span>
+              <span id="progress-detail" class="progress-detail"></span>
+            </div>
+            <button id="progress-cancel" class="clear-all">Cancel</button>
+          </div>
         </div>
       </div>
     </section>

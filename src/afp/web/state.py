@@ -15,6 +15,7 @@ from ..adapters.faa import FAAAdapter
 from ..custom_entries import check_custom_group_capacity, split_recognized_and_custom
 from ..export.xml_reader import parse_memory_book_xml
 from ..nasr.source import NASRSource
+from ..progress import ProgressTracker
 from ..query.db import build_database
 from ..schema import NormalizedData
 from ..selection import Entry
@@ -36,6 +37,9 @@ class AppState:
         self.cache_dir = Path(cache_dir)
         self.source = NASRSource(cache_dir=self.cache_dir)
         self.loaded: LoadedCycle | None = None
+        # The fetch or load currently running, or the last one to finish.
+        # None until the first one starts.
+        self.progress: ProgressTracker | None = None
 
         self.custom_entries_path = self.cache_dir / "custom_entries.json"
         self.group_setup_path = self.cache_dir / "group_setup.json"
@@ -61,17 +65,41 @@ class AppState:
                 found.append(date.fromisoformat(entry.name))
         return sorted(found, reverse=True)
 
-    def load_cycle(self, cycle_date: date) -> LoadedCycle:
+    def load_cycle(
+        self, cycle_date: date, progress: ProgressTracker | None = None
+    ) -> LoadedCycle:
         cycle_dir = self.cache_dir / cycle_date.isoformat()
         adapter = FAAAdapter(
             apt_base=cycle_dir / "APT_BASE.csv",
             frq=cycle_dir / "FRQ.csv",
             ils_base=cycle_dir / "ILS_BASE.csv",
         )
+        # Only about a second and a half between them, but it is the tail
+        # of the fetch as well as the whole of a cached load -- so the
+        # same two step keys appear in both step lists and this reports
+        # into whichever tracker it was handed.
+        if progress:
+            progress.begin("parse")
         data = adapter.parse()
+        if progress:
+            progress.begin("build")
         conn = build_database(data)
         self.loaded = LoadedCycle(cycle_date=cycle_date, data=data, conn=conn)
         return self.loaded
+
+    # ---------- the one operation slow enough to watch ----------
+
+    def begin_progress(self, steps) -> ProgressTracker:
+        """Install a tracker for a fetch or load that is about to start.
+
+        A single-user local app has exactly one of these at a time, so
+        this is a field rather than a job table. The previous tracker is
+        replaced rather than cleared on completion: the frontend's last
+        poll lands just after the work ends, and it needs to find the
+        outcome there rather than an empty slot.
+        """
+        self.progress = ProgressTracker(steps)
+        return self.progress
 
     def import_custom_entries(self, xml_bytes: bytes) -> list[Entry]:
         """Parses a full YCE-46 export, keeps only the entries that don't

@@ -53,7 +53,9 @@ def test_fetch_current_cycle_downloads_and_extracts_each_category(
 ):
     calls = {"downloaded": [], "extracted": []}
 
-    def fake_download_file(url, dest_path):
+    # on_bytes mirrors the real signature: fetch_current_cycle passes a
+    # progress sink through when it has one, and None otherwise.
+    def fake_download_file(url, dest_path, on_bytes=None):
         calls["downloaded"].append((url, dest_path))
         dest_path.parent.mkdir(parents=True, exist_ok=True)
         dest_path.write_bytes(b"")

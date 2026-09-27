@@ -810,6 +810,42 @@ main#app > .workspace,
 .load-panel-body #fetch-btn { width: 100%; text-align: left; font-size: 14px; padding: 12px 16px; }
 .load-panel-body #fetch-status { margin: 10px 0 0; font-size: 12px; line-height: 1.6; color: var(--ink3); }
 
+/* Fetch / load progress. Built like .counter-bar -- coloured fill in a
+   bordered trough -- so the two bars in the app read as the same part. */
+.progress { margin-top: 14px; }
+.progress-bar {
+  height: 6px;
+  background: var(--input);
+  border: 1px solid var(--line2);
+}
+.progress-bar span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--ok);
+  /* Eased because the poll lands a few times a second: without it the
+     fill steps visibly rather than moving. Short enough that the final
+     jump to 100% still reads as arrival. */
+  transition: width .25s linear;
+}
+.progress-text {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ink2);
+}
+/* The byte count. Tabular figures so the digits don't jitter sideways
+   as they climb -- it updates several times a second. */
+.progress-detail {
+  margin-left: auto;
+  color: var(--ink3);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+#progress-cancel { margin-top: 10px; }
+
 .cycle-list { display: flex; flex-direction: column; margin-bottom: 12px; }
 .cycle-row {
   display: flex;
