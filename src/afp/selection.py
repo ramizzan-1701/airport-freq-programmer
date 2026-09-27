@@ -174,22 +174,34 @@ class Entry:
 # constant so other code (the group-setup CTA, and the custom-entry import
 # flow's recognized/custom split) has a single source of truth rather than
 # re-deriving or duplicating this list.
-# The top of what the radio can tune. The FTA-850 covers the VHF airband
-# and the nav band below it; it has no receiver above the airband at all,
-# so anything at or above this is not a frequency the user could ever
-# select -- it is a memory slot spent on nothing.
+# What the radio can actually tune: the nav band and the VHF airband
+# above it, 108.000 to 136.975. Anything outside is not a frequency the
+# user could ever select -- it is a memory slot spent on nothing.
 #
-# NASR carries the military UHF assignments (225-400 MHz) in the same
-# table as the VHF ones, plus a few radar entries far higher: 12,354 of
-# 40,388 rows in the 2026-09-03 cycle, 31% of the file. Every one was
-# eligible for the 400-entry export, and 658 of them were TOWER rows --
-# which is also how a UHF tower row could win the primary-comm slot for
-# an airport and push the VHF one out.
+# NASR files every assignment in one table regardless of band, so both
+# ends carry a lot of it (2026-09-03 cycle, 40,388 rows):
 #
-# No lower bound: the nav band (VOR from 108.0, ILS localizers 108.3 to
-# 111.95 on this cycle) is below the airband and is tunable. NDB, which
-# is far lower and genuinely unusable, is already excluded by category.
+#   12,354 rows at or above 137.0 -- the military UHF assignments
+#   (225-400 MHz) plus a few radar entries as high as 21964 MHz. 31% of
+#   the file. 658 of them are TOWER rows, which is also how a UHF row
+#   could win an airport's primary-comm slot and push the VHF tower out.
+#
+#   158 rows below 108.0 -- military VHF-low (36.5-49.8 MHz), and the
+#   NDB beacons at 190-535 kHz.
+#
+# The lower bound subsumes NOT_USABLE_ON_FTA_850L's NDB exclusion, which
+# was a category-level rule for what is really a band problem.
+MIN_TUNABLE_MHZ = 108.0
 MAX_TUNABLE_MHZ = 137.0
+
+
+def is_tunable(freq_mhz: float) -> bool:
+    """Whether the radio has a receiver for this frequency at all.
+
+    Deliberately not a question about categories or filters: an entry
+    outside this band is not a choice the user could make differently.
+    """
+    return MIN_TUNABLE_MHZ <= freq_mhz < MAX_TUNABLE_MHZ
 
 FIXED_GROUP_NAMES = frozenset({"0-9", "A-E", "F-J", "K-O", "P-T", "U-Z"})
 
@@ -553,7 +565,7 @@ def select_entries(
     # instead of an empty one.
     freqs_by_airport: dict[str, list[Frequency]] = {}
     for f in data.frequencies:
-        if f.freq_mhz >= MAX_TUNABLE_MHZ:
+        if not is_tunable(f.freq_mhz):
             continue
         freqs_by_airport.setdefault(f.airport_id, []).append(f)
 

@@ -192,13 +192,25 @@ def test_airspace_emergency_ndb_hidden_from_web_ui_but_still_filterable(tmp_path
     assert freq_category_codes == {"CTAF"}
     assert not freq_category_codes & {"AIRSPACE_INFO", "EMERGENCY", "NDB"}
 
-    for hidden_category in ("AIRSPACE_INFO", "EMERGENCY", "NDB"):
+    # The filter dimension still works for all three -- none of them
+    # errors or is rejected. What each yields differs, and for two of
+    # them the answer is nothing, for unrelated reasons:
+    #
+    #   AIRSPACE_INFO is NON_SELECTABLE -- an annotation on another row,
+    #     never an entry of its own.
+    #   NDB sits at 190-535 kHz, far below the nav band, so the tunable
+    #     band check drops it before selection. This used to yield an
+    #     entry the radio could not have tuned.
+    #   EMERGENCY is a real, in-band frequency and still filters through.
+    expected = {
+        "AIRSPACE_INFO": set(),
+        "NDB": set(),
+        "EMERGENCY": {"AAA-EMERG"},
+    }
+    for hidden_category, expected_tags in expected.items():
         res = client.post("/api/query", json={"freq_categories": [hidden_category]})
         assert res.status_code == 200
-        # AIRSPACE_INFO is also NON_SELECTABLE -- never produces an entry
-        # regardless; EMERGENCY/NDB still filter normally.
-        expected_tags = set() if hidden_category == "AIRSPACE_INFO" else {f"AAA-{'EMERG' if hidden_category == 'EMERGENCY' else 'NDB'}"}
-        assert {e["tag_name"] for e in res.json()["entries"]} == expected_tags
+        assert {e["tag_name"] for e in res.json()["entries"]} == expected_tags, hidden_category
 
 
 def test_include_non_site_facilities_flows_through_the_api(tmp_path):

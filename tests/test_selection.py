@@ -59,16 +59,53 @@ def test_the_top_of_the_airband_is_kept():
     assert 136.975 < MAX_TUNABLE_MHZ
 
 
-def test_nav_band_frequencies_below_the_airband_are_kept():
-    """The limit is one-sided on purpose: VOR and ILS localizers sit
-    below the airband (108.0-117.95) and the radio tunes them.
+def test_nav_band_frequencies_are_kept():
+    """The band runs below the airband, not from it: VOR and ILS
+    localizers sit at 108.0-117.95 and the radio tunes them. A limit
+    starting at 118.0 would silently delete every navaid in the export.
     """
     data = NormalizedData(
         airports=[_airport("XXX")],
-        frequencies=[_freq("XXX", 114.9, "VOR", raw_freq_use="BIG VORTAC")],
+        frequencies=[
+            _freq("XXX", 108.0, "VOR", raw_freq_use="X VORTAC"),
+            _freq("XXX", 114.9, "VOR", raw_freq_use="BIG VORTAC"),
+            _freq("XXX", 117.95, "VOR", raw_freq_use="Y VORTAC"),
+        ],
         ils=[],
     )
-    assert [e.freq_mhz for e in select_entries(data, mode="smart")] == [114.9]
+    assert len(select_entries(data, mode="smart")) == 3
+
+
+def test_frequencies_below_the_nav_band_never_become_entries():
+    """The other end of the same problem: 158 rows in the 2026-09-03
+    cycle are military VHF-low (36.5-49.8 MHz), which the radio cannot
+    tune any more than it can the UHF ones.
+    """
+    data = NormalizedData(
+        airports=[_airport("XXX")],
+        frequencies=[
+            _freq("XXX", 121.4, "GROUND", raw_freq_use="GND/P"),
+            _freq("XXX", 40.8, "MIL_GOV_OPS", raw_freq_use="OPS"),
+            _freq("XXX", 49.8, "TOWER", raw_freq_use="LCL/P"),
+        ],
+        ils=[],
+    )
+    for mode in ("smart", "raw"):
+        assert [e.freq_mhz for e in select_entries(data, mode=mode)] == [121.4], mode
+
+
+def test_ndb_is_out_of_band_rather_than_a_special_case():
+    """NDB beacons run 190-535 kHz. This was handled as a category rule
+    (NOT_USABLE_ON_FTA_850L) for what is really a band problem -- the
+    lower bound now covers it, and covers the untunable rows in other
+    categories that the category rule never reached.
+    """
+    data = NormalizedData(
+        airports=[_airport("XXX")],
+        frequencies=[_freq("XXX", 0.396, "NDB")],
+        ils=[],
+    )
+    assert select_entries(data, mode="raw") == []
 
 
 def test_a_facility_with_nothing_tunable_produces_no_entries():
