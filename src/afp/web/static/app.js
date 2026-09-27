@@ -477,6 +477,7 @@ async function initWorkspace() {
   if (selected.states.size) await refreshCityOptions();
   renderFilters();
   await loadCustomEntries();
+  await loadGroups();
   await runQuery();
 }
 
@@ -1891,6 +1892,349 @@ function modalHeader(title, subtitle) {
   return head;
 }
 
+
+// ---------- memory groups ----------
+//
+// The radio has 9 group slots. Six carry whichever naming scheme is
+// active and the app fills them; three are the user's own, named here
+// and filled by copying rows into them.
+//
+// The export declares all of these in a <GROUPS> block, which is what
+// removed the old "go and rename six groups in YCE-46 first" step.
+
+let groupsState = null;
+
+async function loadGroups() {
+  // Checked rather than assumed: a non-ok response still parses as JSON
+  // -- an error body -- and assigning that produced a groupsState with
+  // no schemes on it, which threw mid-render and took the rest of the
+  // workspace down with it.
+  try {
+    const res = await api("/api/groups");
+    groupsState = res.ok ? await res.json() : null;
+  } catch {
+    groupsState = null;
+  }
+  renderGroupsBar();
+}
+
+const SCHEME_LABELS = {
+  alphabetical: "By airport ID",
+  category: "By frequency type",
+};
+
+function renderGroupsBar() {
+  const bar = document.getElementById("groups-bar");
+  bar.innerHTML = "";
+  bar.classList.toggle("hidden", !groupsState);
+  if (!groupsState) return;
+
+  const kicker = document.createElement("span");
+  kicker.className = "groups-kicker";
+  kicker.textContent = "Memory groups";
+  bar.appendChild(kicker);
+  bar.appendChild(helpIcon(
+    "The 6 app groups are named by the scheme you pick here. The 3 custom " +
+    "groups are yours -- name them, then right-click rows to copy frequencies in. " +
+    "All 9 names are written into the XML, so nothing needs renaming in YCE-46."
+  ));
+
+  // Scheme choice. A segmented pair rather than a dropdown: there are
+  // two options and both fit, so hiding one behind a click buys nothing.
+  const seg = document.createElement("div");
+  seg.className = "seg";
+  for (const name of Object.keys(groupsState.schemes)) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "seg-btn" + (name === groupsState.scheme ? " on" : "");
+    btn.textContent = SCHEME_LABELS[name] || name;
+    btn.title = groupsState.schemes[name].join("  ");
+    btn.addEventListener("click", () => setScheme(name));
+    seg.appendChild(btn);
+  }
+  bar.appendChild(seg);
+
+  const presets = document.createElement("span");
+  presets.className = "groups-preview";
+  presets.textContent = groupsState.preset_names.join("  ");
+  bar.appendChild(presets);
+
+  const customLabel = document.createElement("span");
+  customLabel.className = "groups-kicker groups-custom-label";
+  customLabel.textContent = "Your groups";
+  bar.appendChild(customLabel);
+
+  groupsState.custom_slots.forEach((slot, offset) => {
+    const wrap = document.createElement("span");
+    wrap.className = "slot-field";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "slot-input";
+    input.value = slot.name || "";
+    input.placeholder = `Group ${slot.slot + 1}`;
+    input.maxLength = groupsState.max_group_name_length;
+    input.title = slot.entry_count
+      ? `${slot.entry_count} ${slot.entry_count === 1 ? "entry" : "entries"}`
+      : "Empty -- right-click rows in the table to copy frequencies in";
+    input.addEventListener("change", () => renameSlot(offset, input.value));
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") input.blur();
+    });
+    wrap.appendChild(input);
+
+    if (slot.entry_count) {
+      const count = document.createElement("span");
+      count.className = "slot-count";
+      count.textContent = slot.entry_count;
+      wrap.appendChild(count);
+    }
+    bar.appendChild(wrap);
+  });
+}
+
+async function setScheme(scheme) {
+  if (!groupsState || scheme === groupsState.scheme) return;
+  const res = await api("/api/groups/scheme", {
+    method: "PUT",
+    body: JSON.stringify({ scheme }),
+  });
+  if (!res.ok) return;
+  groupsState = await res.json();
+  renderGroupsBar();
+  // The entries do not move; the names they are filed under do. Re-run
+  // so the Group column and the breakdown agree with the new scheme.
+  await runQuery();
+}
+
+async function renameSlot(offset, name) {
+  const res = await api(`/api/groups/custom/${offset}`, {
+    method: "PUT",
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) return;
+  const before = groupsState.custom_slots[offset].name;
+  groupsState = await res.json();
+  const after = groupsState.custom_slots[offset].name;
+  renderGroupsBar();
+  // A name colliding with a scheme's or another slot's is suffixed
+  // rather than refused, so say so -- silently showing something other
+  // than what was typed reads as the field having eaten the input.
+  if (after && name.trim() && after !== name.trim()) {
+    flashGroupsNote(`"${name.trim()}" is reserved -- used "${after}" instead.`);
+  }
+  if (before !== after) await runQuery();
+}
+
+function flashGroupsNote(text) {
+  const bar = document.getElementById("groups-bar");
+  const note = document.createElement("span");
+  note.className = "groups-note";
+  note.textContent = text;
+  bar.appendChild(note);
+  setTimeout(() => note.remove(), 6000);
+}
+
+
+
+// ---------- row selection and the copy menu ----------
+//
+// Rows are picked with checkboxes and acted on from a right-click menu.
+// Selection is by tag name rather than row index: the table re-renders
+// on every query, and an index would then point at a different
+// frequency than the one that was ticked.
+
+let selectedTags = new Set();
+// The rows currently rendered, keyed so the menu can act on a selection
+// without reading it back out of the DOM.
+let renderedByTag = new Map();
+
+/** A key that identifies one row.
+ *
+ * Not the tag name: tag names are only unique *within* a group, which
+ * is the rule the XML writer enforces, so a frequency copied into a
+ * custom group shares its tag with the generated row it came from. Keyed
+ * on the tag alone those two rows collided in the map -- one of them
+ * vanished from the selection, ticking either ticked both, and delete
+ * could resolve to the wrong one of the pair.
+ *
+ * Custom rows key on their index in the held entries, which is what
+ * delete addresses anyway; generated rows on group plus tag, which the
+ * uniqueness rule makes safe.
+ */
+function rowKey(e) {
+  return e.is_custom ? `c:${e.custom_index}` : `g:${e.group}:${e.tag_name}`;
+}
+
+function selectionEntries() {
+  return [...selectedTags].map((t) => renderedByTag.get(t)).filter(Boolean);
+}
+
+function updateSelectionUi() {
+  const rows = document.querySelectorAll("#results-body tr");
+  for (const tr of rows) {
+    const on = selectedTags.has(tr.dataset.key);
+    tr.classList.toggle("row-selected", on);
+    const cb = tr.querySelector(".row-check");
+    if (cb) cb.checked = on;
+  }
+  const all = document.getElementById("select-all-rows");
+  const total = renderedByTag.size;
+  const picked = [...selectedTags].filter((t) => renderedByTag.has(t)).length;
+  all.checked = total > 0 && picked === total;
+  all.indeterminate = picked > 0 && picked < total;
+}
+
+function toggleRow(key, on) {
+  if (on) selectedTags.add(key);
+  else selectedTags.delete(key);
+  updateSelectionUi();
+}
+
+function clearSelection() {
+  selectedTags.clear();
+  updateSelectionUi();
+}
+
+/** The menu opened by right-clicking a row. */
+function openRowMenu(event, key) {
+  event.preventDefault();
+  // Right-clicking outside the selection acts on the row under the
+  // cursor instead -- matching what every file manager does, and
+  // avoiding a copy that silently used a selection made minutes ago.
+  if (!selectedTags.has(key)) {
+    selectedTags = new Set([key]);
+    updateSelectionUi();
+  }
+
+  const menu = document.getElementById("row-menu");
+  menu.innerHTML = "";
+  const chosen = selectionEntries();
+  const count = chosen.length;
+  const plural = count === 1 ? "frequency" : "frequencies";
+
+  const head = document.createElement("div");
+  head.className = "row-menu-head";
+  head.textContent = `${count} ${plural} selected`;
+  menu.appendChild(head);
+
+  // Copy to... -- one row per custom slot, named or not.
+  const copyLabel = document.createElement("div");
+  copyLabel.className = "row-menu-label";
+  copyLabel.textContent = "Copy to";
+  menu.appendChild(copyLabel);
+
+  for (const slot of (groupsState ? groupsState.custom_slots : [])) {
+    const offset = slot.slot - 6;
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "row-menu-item";
+    const name = document.createElement("span");
+    name.textContent = slot.name || `Group ${slot.slot + 1}`;
+    if (!slot.name) name.className = "row-menu-unnamed";
+    item.appendChild(name);
+    if (slot.entry_count) {
+      const n = document.createElement("span");
+      n.className = "row-menu-count";
+      n.textContent = slot.entry_count;
+      item.appendChild(n);
+    }
+    item.addEventListener("click", () => {
+      closeRowMenu();
+      copySelectionTo(offset, chosen);
+    });
+    menu.appendChild(item);
+  }
+
+  // Delete -- only ever offered for the user's own entries. A generated
+  // one would reappear on the next query, so removing it would look
+  // broken rather than protective.
+  const deletable = chosen.filter((e) => e.custom_index !== null && e.custom_index !== undefined);
+  if (deletable.length) {
+    menu.appendChild(Object.assign(document.createElement("div"), { className: "row-menu-sep" }));
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "row-menu-item row-menu-danger";
+    del.textContent = `Delete ${deletable.length} custom ${deletable.length === 1 ? "entry" : "entries"}`;
+    del.addEventListener("click", () => {
+      closeRowMenu();
+      deleteCustomEntries(deletable);
+    });
+    menu.appendChild(del);
+  }
+
+  // Positioned at the cursor, then pulled back inside the window if it
+  // would hang off the edge.
+  menu.classList.remove("hidden");
+  const { innerWidth: w, innerHeight: h } = window;
+  const rect = menu.getBoundingClientRect();
+  menu.style.left = `${Math.min(event.clientX, w - rect.width - 8)}px`;
+  menu.style.top = `${Math.min(event.clientY, h - rect.height - 8)}px`;
+}
+
+function closeRowMenu() {
+  document.getElementById("row-menu").classList.add("hidden");
+}
+
+async function copySelectionTo(offset, entries) {
+  const res = await api("/api/groups/copy", {
+    method: "POST",
+    body: JSON.stringify({ slot: offset, entries }),
+  });
+  if (!res.ok) {
+    flashGroupsNote("Copy failed.");
+    return;
+  }
+  const result = await res.json();
+  await loadGroups();
+  await loadCustomEntries();
+  await runQuery();
+
+  // Collisions are reported rather than silently dropped: the tag name
+  // has to be unique within a group, and the user is the only one who
+  // can decide what to rename.
+  if (result.skipped.length) {
+    const names = result.skipped.slice(0, 3).join(", ");
+    const more = result.skipped.length > 3 ? ` and ${result.skipped.length - 3} more` : "";
+    flashGroupsNote(
+      `Copied ${result.copied} to ${result.group}. Skipped ${result.skipped.length} ` +
+      `already there: ${names}${more}. Rename to copy them in.`
+    );
+  } else {
+    flashGroupsNote(`Copied ${result.copied} to ${result.group}.`);
+  }
+}
+
+async function deleteCustomEntries(entries) {
+  const n = entries.length;
+  if (!confirm(`Delete ${n} custom ${n === 1 ? "entry" : "entries"}? This cannot be undone.`)) {
+    return;
+  }
+  // Highest index first, so each removal cannot shift the next one.
+  const indexes = entries.map((e) => e.custom_index).sort((a, b) => b - a);
+  for (const i of indexes) {
+    await api(`/api/custom-entries/${i}`, { method: "DELETE" }).catch(() => {});
+  }
+  clearSelection();
+  await loadGroups();
+  await loadCustomEntries();
+  await runQuery();
+}
+
+document.getElementById("select-all-rows").addEventListener("change", (e) => {
+  if (e.target.checked) selectedTags = new Set(renderedByTag.keys());
+  else selectedTags.clear();
+  updateSelectionUi();
+});
+
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#row-menu")) closeRowMenu();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeRowMenu();
+});
+
+
 // ---------- query + results ----------
 
 const scheduleQuery = debounce(runQuery, 200);
@@ -1989,9 +2333,26 @@ function renderResults(result) {
 
   const body = document.getElementById("results-body");
   body.innerHTML = "";
+  // Rebuilt every render, and the selection is intersected with it
+  // below -- a tag that filtered out stops being selectable, and a copy
+  // must never act on a row the user can no longer see.
+  renderedByTag = new Map(result.entries.map((e) => [rowKey(e), e]));
   for (const e of result.entries) {
     const tr = document.createElement("tr");
     if (e.is_custom) tr.className = "row-custom";
+    tr.dataset.key = rowKey(e);
+
+    const checkTd = document.createElement("td");
+    checkTd.className = "col-select";
+    const check = document.createElement("input");
+    check.type = "checkbox";
+    check.className = "row-check";
+    check.setAttribute("aria-label", `Select ${e.tag_name}`);
+    check.addEventListener("change", () => toggleRow(rowKey(e), check.checked));
+    checkTd.appendChild(check);
+    tr.appendChild(checkTd);
+
+    tr.addEventListener("contextmenu", (ev) => openRowMenu(ev, rowKey(e)));
 
     tr.appendChild(cell("cell-tag", e.tag_name));
     tr.appendChild(cell("cell-freq", e.freq_mhz.toFixed(3)));
@@ -2031,6 +2392,12 @@ function renderResults(result) {
 
     body.appendChild(tr);
   }
+
+  // Drop anything no longer on screen, then repaint the ticks. The
+  // brief calls for selection to survive re-sorting and re-filtering,
+  // which it does for every row that is still there.
+  selectedTags = new Set([...selectedTags].filter((t) => renderedByTag.has(t)));
+  updateSelectionUi();
 }
 
 function cell(className, text) {

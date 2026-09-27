@@ -195,6 +195,61 @@ class EntryOut(BaseModel):
     # Preserved from the user's radio rather than derived from FAA data.
     # Carries no airport, city or state -- the fields above are empty.
     is_custom: bool = False
+    # Carried so a row can be copied into a custom group without the
+    # server re-deriving it: a copy is a snapshot of what was on screen,
+    # so the row holds everything the snapshot needs.
+    lat: float = 0.0
+    lon: float = 0.0
+    category: str = ""
+    # Where this sits in the held custom entries, for the rows that are
+    # deletable. None for a generated entry, which is not.
+    custom_index: int | None = None
+
+
+class GroupSlotOut(BaseModel):
+    """One of the user's three slots."""
+
+    slot: int
+    # None when the slot has never been named. The UI shows it as
+    # unnamed; naming happens on first use.
+    name: str | None = None
+    entry_count: int = 0
+
+
+class GroupsOut(BaseModel):
+    scheme: str
+    # Both schemes, so the selector can label them without a second copy
+    # of the names living in the frontend.
+    schemes: dict[str, list[str]]
+    preset_names: list[str]
+    custom_slots: list[GroupSlotOut]
+    max_group_name_length: int
+
+
+class GroupSchemeIn(BaseModel):
+    scheme: str
+
+
+class CustomGroupNameIn(BaseModel):
+    name: str
+
+
+class CopyEntriesIn(BaseModel):
+    slot: int
+    entries: list[EntryOut]
+
+
+class CopyEntriesOut(BaseModel):
+    """What a copy actually did.
+
+    `skipped` is the tag names already present in the target group --
+    reported rather than silently dropped, and rather than failing the
+    whole copy over one collision.
+    """
+
+    group: str
+    copied: int
+    skipped: list[str]
 
 
 class CategoryCountOut(BaseModel):

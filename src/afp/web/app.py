@@ -17,7 +17,7 @@ from pydantic import ValidationError
 
 from .. import RELEASE_DATE, __version__, about as about_copy, classification
 from ..counter import counter_status
-from ..custom_entries import CustomGroupCapacityError, custom_group_names
+from ..custom_entries import CustomGroupCapacityError
 from ..export.fta850l import FTA_850L
 from ..export.xml_reader import XmlParseError
 from ..export.xml_writer import ExportValidationError, build_xml
@@ -25,7 +25,9 @@ from ..nasr.source import FetchResult
 from ..progress import FETCH_STEPS, LOAD_STEPS, Cancelled
 from ..query import query as query_mod
 from ..selection import (
-    ALPHABETICAL,
+    GROUP_SCHEMES,
+    PRESET_SLOTS,
+    Entry,
     group_slots,
     orphan_tag_ids,
     select_entries,
@@ -41,7 +43,13 @@ from .models import (
     EntryOut,
     FilterOptionsOut,
     FilterStateIn,
+    CopyEntriesIn,
+    CopyEntriesOut,
+    CustomGroupNameIn,
     FreqCategoryOption,
+    GroupSchemeIn,
+    GroupSlotOut,
+    GroupsOut,
     LabeledOption,
     ProgressOut,
     QueryResultOut,
@@ -348,7 +356,13 @@ def create_app(cache_dir: Path) -> FastAPI:
             tag_id = orphan_ids[f.airport_id]
             if tag_id not in facility_by_id:
                 facility_by_id[tag_id] = f
-        entries = select_entries(filtered_data, mode=body.mode, include_public=True, include_private=True)
+        entries = select_entries(
+            filtered_data,
+            mode=body.mode,
+            include_public=True,
+            include_private=True,
+            scheme=app_state.group_scheme,
+        )
 
         # The radio's cap applies to filtered + held custom entries
         # together (spec §5 step 7), and the preview lists them together
@@ -384,6 +398,14 @@ def create_app(cache_dir: Path) -> FastAPI:
                         city="",
                         state="",
                         is_custom=True,
+                        lat=e.lat,
+                        lon=e.lon,
+                        category=e.category,
+                        # Its position in the held custom entries, which
+                        # is what the delete endpoint addresses. Safe
+                        # because custom entries lead the list in the
+                        # same order they are held.
+                        custom_index=i,
                     )
                 )
                 continue
@@ -405,6 +427,9 @@ def create_app(cache_dir: Path) -> FastAPI:
                     airport_name=name,
                     city=city,
                     state=state,
+                    lat=e.lat,
+                    lon=e.lon,
+                    category=e.category,
                 )
             )
 
@@ -460,7 +485,12 @@ def create_app(cache_dir: Path) -> FastAPI:
         filter_state = _build_filter_state(body, loaded)
         # Custom entries keep their original group untouched and are never
         # deduplicated against the freshly generated set (spec §5 step 9).
-        entries = query_mod.filtered_entries(loaded.conn, filter_state, mode=body.mode) + state.custom_entries
+        entries = (
+            query_mod.filtered_entries(
+                loaded.conn, filter_state, mode=body.mode, scheme=state.group_scheme
+            )
+            + state.custom_entries
+        )
 
         # The file now declares the radio's group names itself, which is
         # what retired the old "go and rename six groups in YCE-46 by
@@ -473,7 +503,7 @@ def create_app(cache_dir: Path) -> FastAPI:
         # renaming; until then there is nothing to remember it from, and
         # the file is self-consistent either way because every name it
         # uses is a name it defines.
-        slots = group_slots(ALPHABETICAL, custom_group_names(state.custom_entries))
+        slots = group_slots(state.group_scheme, state.custom_slot_names)
 
         try:
             xml_bytes = build_xml(entries, FTA_850L, slots)
@@ -511,6 +541,89 @@ def create_app(cache_dir: Path) -> FastAPI:
             entries=entries_out,
             entry_count=len(entries_out),
             group_count=len({e.group for e in state.custom_entries}),
+        )
+
+    # ---------- groups ----------
+
+    def _groups_out(state: AppState) -> GroupsOut:
+        counts = Counter(e.group for e in state.custom_entries)
+        return GroupsOut(
+            scheme=state.group_scheme,
+            schemes={name: list(names) for name, names in GROUP_SCHEMES.items()},
+            preset_names=list(GROUP_SCHEMES[state.group_scheme]),
+            custom_slots=[
+                GroupSlotOut(
+                    slot=PRESET_SLOTS + offset,
+                    name=name,
+                    entry_count=counts.get(name, 0) if name else 0,
+                )
+                for offset, name in enumerate(state.custom_slot_names)
+            ],
+            max_group_name_length=FTA_850L.max_group_name_length,
+        )
+
+    @app.get("/api/groups", response_model=GroupsOut)
+    def get_groups() -> GroupsOut:
+        return _groups_out(app.state.afp_state)
+
+    @app.put("/api/groups/scheme", response_model=GroupsOut)
+    def set_group_scheme(body: GroupSchemeIn) -> GroupsOut:
+        """Changing this re-groups every generated entry on the next
+        query -- the entries themselves do not move, the names they are
+        filed under do.
+        """
+        state: AppState = app.state.afp_state
+        try:
+            state.set_group_scheme(body.scheme)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        return _groups_out(state)
+
+    @app.put("/api/groups/custom/{offset}", response_model=GroupsOut)
+    def rename_custom_group(offset: int, body: CustomGroupNameIn) -> GroupsOut:
+        """Names or renames one of the user's three slots.
+
+        A name that collides with a scheme's or with another slot is
+        suffixed rather than refused -- WEATHER becomes WEATHER1 -- so
+        the answer is always a usable name and the UI reflects back what
+        was actually used.
+        """
+        state: AppState = app.state.afp_state
+        try:
+            state.rename_custom_slot(offset, body.name)
+        except IndexError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from None
+        return _groups_out(state)
+
+    @app.post("/api/groups/copy", response_model=CopyEntriesOut)
+    def copy_to_custom_group(body: CopyEntriesIn) -> CopyEntriesOut:
+        """Snapshots the given entries into one of the user's slots.
+
+        The entries arrive from the client rather than being re-derived
+        here on purpose: a copy is a snapshot of what was on screen at
+        the moment it was made, which is also what makes it independent
+        of later NASR changes.
+        """
+        state: AppState = app.state.afp_state
+        entries = [
+            Entry(
+                tag_name=e.tag_name,
+                freq_mhz=e.freq_mhz,
+                group="",
+                lat=e.lat,
+                lon=e.lon,
+                category=e.category,
+            )
+            for e in body.entries
+        ]
+        try:
+            copied, skipped = state.copy_to_custom_slot(body.slot, entries)
+        except IndexError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from None
+        return CopyEntriesOut(
+            group=state.custom_slot_names[body.slot] or "",
+            copied=len(copied),
+            skipped=skipped,
         )
 
     @app.get("/api/custom-entries", response_model=CustomEntriesOut)

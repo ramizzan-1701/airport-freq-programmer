@@ -60,3 +60,25 @@ def load_filters(path: Path) -> dict | None:
 def save_filters(path: Path, filters: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(filters), encoding="utf-8")
+
+
+def load_groups(path: Path) -> dict | None:
+    """The group scheme and custom slot names saved last session, or None
+    if nothing has been saved yet.
+
+    Returns None for an unreadable file too, same as load_filters: a
+    corrupt one should leave the app on its defaults, not stop it
+    opening.
+    """
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def save_groups(path: Path, groups: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(groups), encoding="utf-8")

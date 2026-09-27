@@ -68,6 +68,10 @@
 
         <div id="custom-bar" class="custom-bar"></div>
 
+        <!-- Sits directly above the table whose Group column it
+             controls, which is the clearest place to associate the two. -->
+        <div id="groups-bar" class="groups-bar"></div>
+
         <div id="generate-errors" class="generate-errors hidden"></div>
 
         <div id="results-note"></div>
@@ -76,6 +80,7 @@
           <table class="results-table">
             <thead>
               <tr>
+                <th class="col-select"><input type="checkbox" id="select-all-rows" aria-label="Select all rows" /></th>
                 <th>Tag</th>
                 <th>Frequency</th>
                 <th>Group</th>
@@ -86,6 +91,10 @@
             <tbody id="results-body"></tbody>
           </table>
         </div>
+
+        <!-- Built on demand and positioned at the cursor. One menu
+             reused rather than one per row: there are up to 500 rows. -->
+        <div id="row-menu" class="row-menu hidden"></div>
       </section>
     </div>
   </main>

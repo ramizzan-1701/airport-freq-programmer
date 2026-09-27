@@ -24,7 +24,7 @@ from __future__ import annotations
 import sqlite3
 
 from ..schema import Airport, Frequency, Ils, NormalizedData
-from ..selection import Entry, select_entries
+from ..selection import ALPHABETICAL, Entry, select_entries
 from .filters import FilterState
 
 _ORPHAN_CONDITION = "airport_id NOT IN (SELECT id FROM airports)"
@@ -349,13 +349,20 @@ def has_ils_data(conn: sqlite3.Connection) -> bool:
     return conn.execute("SELECT 1 FROM ils LIMIT 1").fetchone() is not None
 
 
-def filtered_entries(conn: sqlite3.Connection, filters: FilterState, mode: str = "smart") -> list[Entry]:
+def filtered_entries(
+    conn: sqlite3.Connection,
+    filters: FilterState,
+    mode: str = "smart",
+    scheme: str = ALPHABETICAL,
+) -> list[Entry]:
     """Apply filters, then run selection -- public/private is already
     resolved by apply_filters, so select_entries is told to keep
     everything it's handed rather than re-applying its own default scope.
     """
     data = apply_filters(conn, filters)
-    return select_entries(data, mode=mode, include_public=True, include_private=True)
+    return select_entries(
+        data, mode=mode, include_public=True, include_private=True, scheme=scheme
+    )
 
 
 def count_entries(conn: sqlite3.Connection, filters: FilterState, mode: str = "smart") -> int:
