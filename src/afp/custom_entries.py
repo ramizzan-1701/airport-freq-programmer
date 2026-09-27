@@ -6,12 +6,19 @@ itself would regenerate ("recognized") vs. entries a user hand-added
 
 from __future__ import annotations
 
-from .selection import FIXED_GROUP_NAMES, Entry
+from .selection import CUSTOM_SLOTS, RESERVED_GROUP_NAMES, UNASSIGNED_GROUP, Entry
 
-# 9 total memory-group slots on the FTA-850L; 6 are permanently reserved
-# for this app's fixed naming scheme (FIXED_GROUP_NAMES), leaving 3 for
-# anything else.
-MAX_CUSTOM_GROUPS = 3
+# 9 total memory-group slots on the FTA-850; 6 are held by whichever
+# naming scheme is active, leaving 3 for the user's own.
+MAX_CUSTOM_GROUPS = CUSTOM_SLOTS
+
+# Recognized means "the app would regenerate this from current FAA data",
+# and that has to cover both schemes' names rather than just the active
+# one. A user who switches from alphabetical to category and re-imports
+# would otherwise meet their own six previous group names as six brand
+# new custom groups -- over the 3-slot cap before they had added
+# anything.
+_REGENERATED_GROUP_NAMES = RESERVED_GROUP_NAMES - {UNASSIGNED_GROUP}
 
 
 class CustomGroupCapacityError(Exception):
@@ -25,21 +32,38 @@ class CustomGroupCapacityError(Exception):
 
 
 def split_recognized_and_custom(entries: list[Entry]) -> tuple[list[Entry], list[Entry]]:
-    """Recognized = GROUP matches one of the app's 6 fixed names (will be
-    freshly regenerated from current FAA data, so discarded here). Custom
-    = everything else, presumed user-added, preserved as-is.
+    """Recognized = GROUP matches a name either scheme would produce
+    (regenerated from current FAA data, so discarded here). Custom =
+    everything else, presumed user-added, preserved as-is.
+
+    Entries in ALL are custom. They are the radio's unassigned ones, and
+    while they belong to no named group they are still the user's data --
+    dropping them here would delete them on the next import, since
+    importing replaces the whole memory book rather than merging into it.
+    They are kept, exported back with GROUP=ALL, and land unassigned
+    again. What they never do is consume one of the three slots; see
+    custom_group_names().
     """
-    recognized = [e for e in entries if e.group in FIXED_GROUP_NAMES]
-    custom = [e for e in entries if e.group not in FIXED_GROUP_NAMES]
+    recognized = [e for e in entries if e.group in _REGENERATED_GROUP_NAMES]
+    custom = [e for e in entries if e.group not in _REGENERATED_GROUP_NAMES]
     return recognized, custom
+
+
+def custom_group_names(custom_entries: list[Entry]) -> list[str]:
+    """The distinct named groups the custom entries occupy.
+
+    ALL is not one of them: it is the absence of a group, not a group,
+    and it has no slot to occupy.
+    """
+    return sorted({e.group for e in custom_entries if e.group and e.group != UNASSIGNED_GROUP})
 
 
 def check_custom_group_capacity(custom_entries: list[Entry]) -> None:
     """Raises CustomGroupCapacityError if the custom entries span more than
     MAX_CUSTOM_GROUPS distinct group names. Not a check for whether the 6
-    fixed names are already present -- a first-time import matching none
+    scheme names are already present -- a first-time import matching none
     of them is expected, not an error.
     """
-    groups = {e.group for e in custom_entries}
+    groups = custom_group_names(custom_entries)
     if len(groups) > MAX_CUSTOM_GROUPS:
-        raise CustomGroupCapacityError(list(groups))
+        raise CustomGroupCapacityError(groups)

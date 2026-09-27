@@ -26,8 +26,9 @@ Encodes the lessons learned building this by hand as validation checks
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
+from collections.abc import Mapping
 
-from ..selection import Entry
+from ..selection import UNASSIGNED_GROUP, Entry
 from .profile import ExportProfile
 
 _BOM = b"\xef\xbb\xbf"
@@ -39,8 +40,50 @@ class ExportValidationError(Exception):
         super().__init__("; ".join(problems))
 
 
-def validate(entries: list[Entry], profile: ExportProfile) -> list[str]:
+def validate(
+    entries: list[Entry],
+    profile: ExportProfile,
+    group_slots: Mapping[int, str] | None = None,
+) -> list[str]:
+    """Blocking problems only -- anything here refuses the export.
+
+    Whether an entry names a group that exists is deliberately not in
+    here: an undefined name still imports, the entry just lands
+    ungrouped. See ungrouped_warning().
+    """
     problems: list[str] = []
+
+    if group_slots:
+        if len(group_slots) > profile.max_groups:
+            problems.append(
+                f"{len(group_slots)} groups exceeds {profile.name} cap of "
+                f"{profile.max_groups}"
+            )
+        for slot, name in sorted(group_slots.items()):
+            if len(name) > profile.max_group_name_length:
+                problems.append(
+                    f"group name '{name}' is {len(name)} chars, exceeds "
+                    f"{profile.name} max of {profile.max_group_name_length}"
+                )
+            if not name.strip():
+                problems.append(f"group slot {slot} has an empty name")
+            if name == UNASSIGNED_GROUP:
+                problems.append(
+                    f"'{UNASSIGNED_GROUP}' is the radio's pseudo-group for "
+                    "unassigned entries and cannot be defined as a group"
+                )
+        # Two slots sharing a name leaves the radio with no way to tell
+        # which one an entry meant.
+        by_name: dict[str, list[int]] = {}
+        for slot, name in sorted(group_slots.items()):
+            by_name.setdefault(name.casefold(), []).append(slot)
+        for name, slots in by_name.items():
+            if len(slots) > 1:
+                problems.append(
+                    f"group name '{group_slots[slots[0]]}' is defined on "
+                    f"slots {', '.join(str(s) for s in slots)}"
+                )
+
     seen: set[tuple[str, str]] = set()
     for e in entries:
         if len(e.tag_name) > profile.max_tag_length:
@@ -62,6 +105,34 @@ def validate(entries: list[Entry], profile: ExportProfile) -> list[str]:
     return problems
 
 
+def ungrouped_warning(
+    entries: list[Entry], group_slots: Mapping[int, str] | None = None
+) -> str | None:
+    """How many entries will land with no group on the radio, if any.
+
+    Not a validation problem. An entry naming a group that no <GROUPS>
+    slot defines still imports perfectly well -- it just arrives
+    unassigned, reachable under the radio's ALL view. Refusing to export
+    over that would be refusing to do the thing the user asked for on
+    account of something the radio handles.
+    """
+    defined = {name.casefold() for name in (group_slots or {}).values()}
+    defined.add(UNASSIGNED_GROUP.casefold())
+    stray = [e for e in entries if e.group.casefold() not in defined]
+    if not stray:
+        return None
+    groups = sorted({e.group for e in stray if e.group})
+    named = ", ".join(f"'{g}'" for g in groups[:3])
+    if len(groups) > 3:
+        named += f" and {len(groups) - 3} more"
+    return (
+        f"{len(stray)} entr{'y' if len(stray) == 1 else 'ies'} will land in "
+        f"{UNASSIGNED_GROUP} on the radio: no group is defined for {named}"
+        if groups
+        else f"{len(stray)} entries have no group and will land in {UNASSIGNED_GROUP}"
+    )
+
+
 def _format_coordinate(value: float, positive: str, negative: str) -> tuple[str, str]:
     hemisphere = positive if value >= 0 else negative
     abs_value = abs(value)
@@ -70,18 +141,39 @@ def _format_coordinate(value: float, positive: str, negative: str) -> tuple[str,
     return f"{degrees}°{minutes:06.3f}", hemisphere
 
 
-def build_xml(entries: list[Entry], profile: ExportProfile) -> bytes:
+def build_xml(
+    entries: list[Entry],
+    profile: ExportProfile,
+    group_slots: Mapping[int, str] | None = None,
+) -> bytes:
     """Build the full YCE-46-importable XML file, BOM included.
 
     Raises ExportValidationError (never truncates/renames) if entries
     violate the profile's tag-length, per-group uniqueness, or entry-count
     rules.
+
+    `group_slots` maps a radio slot index to the name to put on it, and
+    becomes the <GROUPS> block. A slot left out is left alone: the radio
+    keeps whatever name it already had there, which is the only way to
+    avoid clobbering groups the app does not manage. Omitted entirely,
+    no <GROUPS> block is written at all and the file is exactly what
+    earlier versions produced.
     """
-    problems = validate(entries, profile)
+    problems = validate(entries, profile, group_slots)
     if problems:
         raise ExportValidationError(problems)
 
     root = ET.Element("FILE")
+
+    # Before MEMORY_BOOK: the groups have to exist before the entries
+    # that name them.
+    if group_slots:
+        groups_el = ET.SubElement(root, "GROUPS")
+        for slot, name in sorted(group_slots.items()):
+            group_el = ET.SubElement(groups_el, "GROUP")
+            group_el.set("index", str(slot))
+            group_el.text = name
+
     book = ET.SubElement(root, "MEMORY_BOOK")
     for e in entries:
         group_el = ET.SubElement(book, "MEMORY_BOOK_GROUP")

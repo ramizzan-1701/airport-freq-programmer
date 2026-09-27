@@ -29,6 +29,7 @@ raw-string matching for CTAF/Tower/Weather detection.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 
 from .classification import (
@@ -203,16 +204,185 @@ def is_tunable(freq_mhz: float) -> bool:
     """
     return MIN_TUNABLE_MHZ <= freq_mhz < MAX_TUNABLE_MHZ
 
-FIXED_GROUP_NAMES = frozenset({"0-9", "A-E", "F-J", "K-O", "P-T", "U-Z"})
+# ---------- group schemes ----------
+#
+# The radio has 9 group slots. Six are managed by the app under one of
+# the schemes below; the remaining three are the user's own.
+#
+# A <GROUPS> block in the import XML defines these names directly, so the
+# app no longer depends on the user having renamed anything in YCE-46 by
+# hand first. Which of the two schemes is in force is the user's choice;
+# the names within a scheme are not.
+
+ALPHABETICAL_GROUP_NAMES: tuple[str, ...] = ("0-9", "A-E", "F-J", "K-O", "P-T", "U-Z")
+
+CATEGORY_GROUP_NAMES: tuple[str, ...] = (
+    "CTAF/UNI",
+    "TWR/GND",
+    "WEATHER",
+    "APCH/DEP",
+    "VOR/ILS",
+    "OTHER",
+)
+
+ALPHABETICAL = "alphabetical"
+CATEGORY = "category"
+
+GROUP_SCHEMES: dict[str, tuple[str, ...]] = {
+    ALPHABETICAL: ALPHABETICAL_GROUP_NAMES,
+    CATEGORY: CATEGORY_GROUP_NAMES,
+}
+
+# Not a nameable group: the radio's pseudo-group for entries with no
+# group assigned. Written as an entry's GROUP, never into <GROUPS>.
+UNASSIGNED_GROUP = "ALL"
+
+# Every name the app may write for itself, both schemes together plus
+# ALL. Reserved against user-entered custom names for a reason beyond
+# tidiness: switching schemes would otherwise leave the six names of the
+# scheme no longer in use looking like six brand-new custom groups on the
+# next import, blowing past the 3-slot cap immediately.
+RESERVED_GROUP_NAMES: frozenset[str] = frozenset(
+    ALPHABETICAL_GROUP_NAMES + CATEGORY_GROUP_NAMES + (UNASSIGNED_GROUP,)
+)
+
+# Which category preset group each freq_category falls into.
+#
+# Deliberately not exhaustive over ALL_FREQ_CATEGORIES: category_group_for
+# falls back to OTHER, so a category added later is grouped sanely rather
+# than raising. NDB and AIRSPACE_INFO are absent on purpose -- neither can
+# reach an export (NDB is outside the tunable band, AIRSPACE_INFO is an
+# annotation on another row) -- and the fallback covers them if that ever
+# changes.
+_CATEGORY_GROUPS: dict[str, str] = {
+    "CTAF": "CTAF/UNI",
+    "UNICOM": "CTAF/UNI",
+    "TOWER": "TWR/GND",
+    "GROUND": "TWR/GND",
+    "CLEARANCE": "TWR/GND",
+    "WEATHER_STATION": "WEATHER",
+    "APCH_DEP": "APCH/DEP",
+    "TRACON": "APCH/DEP",
+    "ARTCC": "APCH/DEP",
+    "FSS": "APCH/DEP",
+    "RCAG": "APCH/DEP",
+    "VOR": "VOR/ILS",
+    "VOT": "VOR/ILS",
+    "DME": "VOR/ILS",
+    "TACAN": "VOR/ILS",
+    "ILS": "VOR/ILS",
+    "MIL_GOV_OPS": "OTHER",
+    "EMERGENCY": "OTHER",
+    "PROCEDURE_FIX": "OTHER",
+    "OTHER": "OTHER",
+}
+
+
+# The radio's 9 slots: the six the active scheme owns, then the user's
+# three. Slot identity is fixed, not positional -- the third custom group
+# is slot 8 whether or not slots 6 and 7 are in use. Deriving the index
+# from a list position instead would silently move a group to a different
+# slot, and rename whatever was there, whenever an earlier one was
+# emptied.
+PRESET_SLOTS = 6
+CUSTOM_SLOTS = 3
+TOTAL_SLOTS = PRESET_SLOTS + CUSTOM_SLOTS
+
+
+def default_custom_group_name(slot: int) -> str:
+    """What YCE-46 already calls an un-renamed slot.
+
+    A custom group that holds entries has to be named something -- an
+    entry naming an undefined group still imports, but lands with no
+    group at all. Borrowing the radio's own default means an unnamed
+    group reads as unnamed rather than as a name the user never chose.
+    Slots are numbered from 1 on the radio, so slot 6 is GROUP7.
+    """
+    return f"GROUP{slot + 1}"
+
+
+def category_group_for(freq_category: str) -> str:
+    """Which of the six category-scheme groups a frequency belongs in.
+
+    Total by construction: anything unmapped lands in OTHER rather than
+    raising. An entry with no category at all (one preserved from the
+    user's own radio, which carries no such concept) lands there too.
+    """
+    return _CATEGORY_GROUPS.get(freq_category, "OTHER")
+
+
+def group_slots(
+    scheme: str = ALPHABETICAL, custom_names: Sequence[str | None] = ()
+) -> dict[int, str]:
+    """Which name goes in which of the radio's 9 slots.
+
+    Slots 0-5 are the active scheme's six names. Slots 6-8 are the user's,
+    and only those actually in use appear: a slot left out of the result
+    is left out of <GROUPS> too, so whatever name the radio already has
+    there survives untouched.
+
+    A custom slot that is in use but unnamed takes the radio's own
+    default for that slot rather than being dropped, since entries
+    pointing at an undefined group land ungrouped.
+    """
+    slots = {i: name for i, name in enumerate(GROUP_SCHEMES[scheme])}
+    for offset, name in enumerate(custom_names[:CUSTOM_SLOTS]):
+        if name is None:
+            continue
+        slot = PRESET_SLOTS + offset
+        slots[slot] = name.strip() or default_custom_group_name(slot)
+    return slots
+
+
+def unreserved_group_name(name: str, taken: Iterable[str] = (), max_length: int = 10) -> str:
+    """`name` adjusted until it collides with nothing reserved or taken.
+
+    A user whose radio already has a group called WEATHER or OTHER would
+    otherwise have it silently absorbed into the app's managed set and
+    its entries discarded as regenerable. Suffixing a digit keeps the
+    name they chose recognisable -- WEATHER1 -- rather than replacing it.
+
+    Truncates from the left of the suffix, not the right of the name, so
+    the result stays within the radio's name length.
+    """
+    # An empty name is a stem like any other rather than a special case:
+    # "GROUP" is not reserved, so it comes back unsuffixed unless it is
+    # genuinely taken.
+    stem = name.strip() or "GROUP"
+    blocked = {n.casefold() for n in RESERVED_GROUP_NAMES} | {n.casefold() for n in taken}
+    if stem.casefold() not in blocked:
+        return stem[:max_length]
+
+    for n in range(1, 100):
+        suffix = str(n)
+        candidate = stem[: max_length - len(suffix)] + suffix
+        if candidate.casefold() not in blocked:
+            return candidate
+    raise ValueError(f"no free name derived from {name!r}")
+
+
+def group_for(entry_category: str, airport_id: str, scheme: str = ALPHABETICAL) -> str:
+    """The group an entry belongs in under `scheme`.
+
+    The two schemes key off different things -- one the airport ID, the
+    other the frequency's category -- so both are taken and each scheme
+    uses what it needs.
+    """
+    if scheme == CATEGORY:
+        return category_group_for(entry_category)
+    if scheme == ALPHABETICAL:
+        return default_group_for(airport_id)
+    raise ValueError(f"unknown group scheme: {scheme!r}")
 
 
 def default_group_for(airport_id: str) -> str:
-    """Fixed group-name scheme, keyed on the airport ID's first character:
-    0-9, A-E, F-J, K-O, P-T, U-Z. This is the permanent scheme (not a
-    placeholder for future dynamic/balanced grouping) -- the user has to
-    manually rename the 9 fixed group slots in YCE-46 to match whatever
-    names the app emits (see spec §5), so a stable, predictable set of
-    group names matters more than evenly balancing entries across them.
+    """The alphabetical scheme, keyed on the airport ID's first
+    character: 0-9, A-E, F-J, K-O, P-T, U-Z.
+
+    Groups an airport's frequencies together, which is what a pilot
+    tuning around one field wants. The category scheme is the other
+    trade-off: it groups by what a frequency is for, which splits a
+    single airport's CTAF, Tower and ATIS across three groups.
     """
     if not airport_id:
         return "0-9"
@@ -545,6 +715,7 @@ def select_entries(
     mode: str = "smart",
     include_public: bool = True,
     include_private: bool = False,
+    scheme: str = ALPHABETICAL,
 ) -> list[Entry]:
     """Build export entries from normalized data.
 
@@ -553,9 +724,15 @@ def select_entries(
     include_public=True, include_private=True includes everything;
     both False yields no entries. Defaults preserve the app's traditional
     public-use-only behavior until a filter UI overrides it.
+
+    `scheme` picks which six group names the entries are sorted into.
+    Defaults to alphabetical, which is what the app has always produced,
+    so an existing caller's output does not change shape.
     """
     if mode not in ("smart", "raw"):
         raise ValueError(f"unknown selection mode: {mode!r}")
+    if scheme not in GROUP_SCHEMES:
+        raise ValueError(f"unknown group scheme: {scheme!r}")
 
     # Out-of-band rows are dropped here rather than in either mode's own
     # path: raw mode means "every registered frequency", not "every row
@@ -603,11 +780,17 @@ def select_entries(
 
         comm = _comm_entries(airport, freqs_by_airport.get(facility_id, []), mode)
         loc = _ils_entries(airport, ils_by_airport.get(facility_id, []), mode)
-        group = default_group_for(facility_id)
+        # Per entry rather than per facility: the alphabetical scheme
+        # keys off the airport ID and is constant across the facility,
+        # but the category scheme keys off each entry's own category.
+        #
         # replace() rather than re-listing every field: this only sets the
         # group, and rebuilding by hand silently drops any field added to
         # Entry later (it already lost `category` once).
-        entries.extend(replace(e, group=group) for e in comm + loc)
+        entries.extend(
+            replace(e, group=group_for(e.category, facility_id, scheme))
+            for e in comm + loc
+        )
 
     return entries
 

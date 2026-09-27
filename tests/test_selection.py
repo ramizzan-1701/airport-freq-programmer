@@ -1,3 +1,5 @@
+import pytest
+
 from afp.export.fta850l import FTA_850L
 from afp.export.xml_writer import build_xml, validate
 from afp.schema import Airport, Frequency, Ils, NormalizedData
@@ -914,3 +916,84 @@ def test_long_orphan_prefix_still_leaves_room_for_its_suffix():
     entries = select_entries(data, include_public=True, include_private=True)
     assert len(entries[0].tag_name) <= FTA_850L.max_tag_length
     assert validate(entries, FTA_850L) == []
+
+
+# ---------- the category scheme, through select_entries ----------
+
+
+def test_the_default_scheme_is_still_alphabetical():
+    """An existing caller's output must not change shape. This is what
+    makes the migration a no-op for anyone who never touches the new
+    setting.
+    """
+    data = NormalizedData(
+        airports=[_airport("HWD")],
+        frequencies=[_freq("HWD", 120.2, "TOWER", raw_freq_use="LCL/P")],
+        ils=[],
+    )
+    assert select_entries(data, mode="smart")[0].group == "F-J"
+
+
+def test_the_category_scheme_groups_by_what_a_frequency_is_for():
+    data = NormalizedData(
+        airports=[_airport("HWD")],
+        frequencies=[
+            _freq("HWD", 120.2, "TOWER", raw_freq_use="LCL/P"),
+            _freq("HWD", 121.4, "GROUND", raw_freq_use="GND/P"),
+            _freq("HWD", 126.7, "WEATHER_STATION", raw_freq_use="ATIS"),
+            _freq("HWD", 122.95, "UNICOM", raw_freq_use="UNICOM"),
+        ],
+        ils=[],
+    )
+    entries = select_entries(data, mode="smart", scheme="category")
+    by_tag = {e.tag_name: e.group for e in entries}
+
+    assert by_tag["HWD-CT"] == "TWR/GND"
+    assert by_tag["HWD-GND"] == "TWR/GND"
+    assert by_tag["HWD-WX"] == "WEATHER"
+    assert by_tag["HWD-UNICOM"] == "CTAF/UNI"
+
+
+def test_the_scheme_is_applied_per_entry_not_per_airport():
+    """The alphabetical scheme is constant across a facility; the
+    category one is not. Assigning once per facility -- which is how this
+    worked -- would put every one of an airport's frequencies in
+    whichever group its first entry happened to land in.
+    """
+    data = NormalizedData(
+        airports=[_airport("HWD")],
+        frequencies=[
+            _freq("HWD", 120.2, "TOWER", raw_freq_use="LCL/P"),
+            _freq("HWD", 126.7, "WEATHER_STATION", raw_freq_use="ATIS"),
+        ],
+        ils=[],
+    )
+    groups = {e.group for e in select_entries(data, mode="smart", scheme="category")}
+    assert len(groups) == 2
+
+
+def test_ils_entries_are_grouped_by_category_too():
+    """They come from their own table and carry a pseudo-category, so
+    they are the likeliest thing to fall through to OTHER.
+    """
+    data = NormalizedData(
+        airports=[_airport("HWD")],
+        frequencies=[],
+        ils=[
+            Ils(
+                airport_id="HWD",
+                runway_end_id="28L",
+                freq_mhz=111.5,
+                system_type="ILS",
+                component_status="OPERATIONAL IFR",
+            )
+        ],
+    )
+    entries = select_entries(data, mode="smart", scheme="category")
+    assert [e.group for e in entries] == ["VOR/ILS"]
+
+
+def test_an_unknown_scheme_is_rejected_rather_than_ignored():
+    data = NormalizedData(airports=[_airport("XXX")], frequencies=[], ils=[])
+    with pytest.raises(ValueError, match="unknown group scheme"):
+        select_entries(data, mode="smart", scheme="by-vibes")

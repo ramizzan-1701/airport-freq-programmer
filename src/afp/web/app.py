@@ -24,7 +24,7 @@ from ..export.xml_writer import ExportValidationError, build_xml
 from ..nasr.source import FetchResult
 from ..progress import FETCH_STEPS, LOAD_STEPS, Cancelled
 from ..query import query as query_mod
-from ..selection import FIXED_GROUP_NAMES, orphan_tag_ids, select_entries
+from ..selection import ALPHABETICAL_GROUP_NAMES, orphan_tag_ids, select_entries
 from .models import (
     AboutActionOut,
     AboutFeatureOut,
@@ -96,7 +96,7 @@ def create_app(cache_dir: Path) -> FastAPI:
             frequency_count=len(loaded.data.frequencies) if loaded else None,
             ils_count=len(loaded.data.ils) if loaded else None,
             group_setup_acknowledged=state.group_setup_acknowledged,
-            fixed_group_names=sorted(FIXED_GROUP_NAMES),
+            fixed_group_names=sorted(ALPHABETICAL_GROUP_NAMES),
             about_acknowledged=state.about_acknowledged,
         )
 
