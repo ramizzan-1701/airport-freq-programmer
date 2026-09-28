@@ -1811,12 +1811,6 @@ function renderGroupsBar() {
   yoursLabel.className = "groups-kicker yours";
   yoursLabel.textContent = "Your groups";
   yours.appendChild(yoursLabel);
-  yours.appendChild(helpIcon(
-    "Three slots that are yours to name. Right-click rows in the table to " +
-    "copy frequencies into one, or import your radio's own export to bring " +
-    "its groups in. All nine group names are written into the XML, so " +
-    "nothing needs renaming in YCE-46."
-  ));
 
   groupsState.custom_slots.forEach((slot, offset) => {
     const wrap = document.createElement("span");
@@ -1845,6 +1839,14 @@ function renderGroupsBar() {
     }
     yours.appendChild(wrap);
   });
+
+  yours.appendChild(helpIcon(
+    "Three slots that are yours to name. Right-click rows in the table to " +
+    "copy frequencies into one, or import your radio's own export to bring " +
+    "its groups in. All nine group names are written into the XML, so " +
+    "nothing needs renaming in YCE-46.",
+    "your groups",
+  ));
 
   // Pushed right, against the import that is the other way of filling
   // these slots.

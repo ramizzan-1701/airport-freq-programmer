@@ -1099,6 +1099,12 @@ main#app > .workspace,
 .groups-kicker {
   flex: none;
   white-space: nowrap;
+  /* Both labels occupy the same width so the first control in each row
+     starts at the same x -- the name fields above the scheme buttons.
+     "Your groups" renders at 91.7px and "App groups" at 82.2px, so
+     without this the rows sat 9.5px out of line. A label longer than
+     this would push past it and break the alignment again. */
+  min-width: 94px;
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 10.5px;

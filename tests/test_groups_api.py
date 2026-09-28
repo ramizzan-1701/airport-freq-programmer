@@ -615,3 +615,49 @@ def test_shift_clicking_does_not_drag_a_text_selection():
 
     css = (STATIC_DIR / "style.css").read_text(encoding="utf-8")
     assert ".col-select { user-select: none; }" in css
+
+
+def test_the_two_group_rows_start_their_controls_at_the_same_place():
+    """The name fields sit directly above the scheme toggle, so the
+    labels have to occupy the same width -- "Your groups" renders wider
+    than "App groups", which left the rows 9.5px out of line.
+    """
+    from afp.web.app import STATIC_DIR
+
+    rule = (STATIC_DIR / "style.css").read_text(encoding="utf-8")
+    rule = rule.split(".groups-kicker {", 1)[1].split("}", 1)[0]
+    assert "min-width:" in rule
+
+
+def test_the_help_icon_sits_after_the_fields_it_describes():
+    """Between the label and the first field it also pushed that field
+    out of line with the row below.
+    """
+    js = _js()
+    row = js.split("function renderGroupsBar()", 1)[1].split("bar.append(yours, app);", 1)[0]
+    assert row.index("yours.appendChild(wrap);") < row.index("yours.appendChild(helpIcon(")
+    assert row.index("yours.appendChild(helpIcon(") < row.index('held.className = "groups-held"')
+
+
+def test_every_help_icon_says_what_it_is_about():
+    """helpIcon takes the subject for its aria-label. Two call sites
+    omitted it, which rendered aria-label="About undefined" -- announced
+    to a screen reader exactly like that.
+    """
+    import re
+
+    js = _js()
+    for call in re.finditer(r"helpIcon\(", js):
+        depth, i = 0, call.end() - 1
+        while i < len(js):
+            if js[i] == "(":
+                depth += 1
+            elif js[i] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        args = js[call.end():i]
+        if args.startswith("text, describes"):
+            continue  # the definition itself
+        assert args.count(",") >= 1, f"helpIcon call with no subject: {args[:60]!r}"
