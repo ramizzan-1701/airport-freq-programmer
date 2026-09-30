@@ -834,7 +834,7 @@ function renderFiltersInner() {
 
   accordionGroup(scopeSection, {
     key: "mode",
-    title: "Data interpretation",
+    title: "Data Interpretation",
     summary: selected.mode === "smart" ? "Smart" : "Raw",
     help:
       "Smart shows one entry when several do the same job at a single airport: " +
@@ -945,7 +945,6 @@ function renderFiltersInner() {
 
   // --- Facility ---
   const facilitySection = section(root, "Facility");
-  renderNonSiteToggle(facilitySection);
 
   accordionGroup(facilitySection, {
     key: "siteType",
@@ -994,6 +993,8 @@ function renderFiltersInner() {
     },
   });
 
+  renderNonSiteToggle(facilitySection);
+
   // Kept across rebuilds at its current height: a checkbox tick must not
   // drop the range the open group's anchoring is relying on.
   const filler = document.createElement("div");
@@ -1018,10 +1019,11 @@ function refreshOpenGroupSummary() {
   if (summaries[openGroup]) el.textContent = summaries[openGroup]();
 }
 
-/** The non-site toggle sits above both Facility groups rather than
+/** The non-site toggle sits outside both Facility groups rather than
  * inside either: it exempts rows from Site Type *and* Facility Status,
  * so hiding it inside one collapsed group would bury a control that
- * governs the other. */
+ * governs the other. Placed at the foot of the section, after the two
+ * groups it qualifies, rather than ahead of them. */
 function renderNonSiteToggle(container) {
   const wrap = document.createElement("div");
   wrap.className = "non-site-block";
@@ -1228,7 +1230,7 @@ function renderRadiusFilters(container) {
   wrap.className = "radius-block";
   const label = document.createElement("div");
   label.className = "filter-group-title";
-  label.textContent = "Geographic radius";
+  label.textContent = "Geographic Radius";
   wrap.appendChild(label);
 
   const list = document.createElement("div");
