@@ -59,3 +59,38 @@ def test_the_non_site_toggle_comes_after_the_groups_it_qualifies():
     body = APP_JS.split("// --- Facility ---", 1)[1].split("filters-filler", 1)[0]
     assert body.index('key: "siteType"') < body.index("renderNonSiteToggle(")
     assert body.index('key: "facilityStatus"') < body.index("renderNonSiteToggle(")
+
+
+def test_an_empty_type_filter_narrows_nothing():
+    """Every other group in the rail treats an empty selection as no
+    constraint. Type read it literally -- exclude public and exclude
+    private -- which can only return an empty result, so clearing both
+    boxes emptied the table and looked like the app had broken.
+    """
+    from afp.query.filters import FilterState
+
+    assert FilterState(include_public=False, include_private=False).airport_use_scope == (
+        True,
+        True,
+    )
+
+
+def test_the_type_filter_still_narrows_when_one_side_is_chosen():
+    """The fix must not collapse into "always everything"."""
+    from afp.query.filters import FilterState
+
+    assert FilterState(include_public=True, include_private=False).airport_use_scope == (
+        True,
+        False,
+    )
+    assert FilterState(include_public=False, include_private=True).airport_use_scope == (
+        False,
+        True,
+    )
+
+
+def test_the_type_summary_no_longer_promises_an_empty_result():
+    """It said "Neither — no entries", which described behaviour the
+    filter no longer has.
+    """
+    assert "no entries" not in APP_JS.split("typeSummary", 1)[1].split(";", 1)[0]

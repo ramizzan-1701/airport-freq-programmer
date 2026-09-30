@@ -91,11 +91,10 @@ def _airport_where(filters: FilterState) -> tuple[str, list]:
     clauses: list[str] = []
     params: list = []
 
-    if not filters.include_public and not filters.include_private:
-        return "0", []  # matches nothing
-    if not filters.include_public:
+    include_public, include_private = filters.airport_use_scope
+    if not include_public:
         clauses.append("public_use = 0")
-    elif not filters.include_private:
+    elif not include_private:
         clauses.append("public_use = 1")
 
     if filters.states:

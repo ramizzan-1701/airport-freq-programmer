@@ -5,9 +5,10 @@ own values (spec §3: "AND logic between filter groups, OR within a
 multi-select group").
 
 Every field defaults to "no constraint" (None, empty tuple, or False) so
-an unfiltered FilterState() matches everything -- except include_public/
-include_private, which default to the app's traditional public-use-only
-scope (see afp.selection).
+an unfiltered FilterState() matches everything. include_public/
+include_private default to the app's traditional public-use-only scope
+(see afp.selection), but follow the same rule when both are off: see
+airport_use_scope.
 """
 
 from __future__ import annotations
@@ -83,6 +84,21 @@ class FilterState:
     radius_filters: tuple[RadiusFilter, ...] = field(default_factory=tuple)
     include_public: bool = True
     include_private: bool = False
+
+    @property
+    def airport_use_scope(self) -> tuple[bool, bool]:
+        """Which airport uses pass, as (public, private).
+
+        Both off means no constraint, not nothing -- the same rule every
+        other filter here follows, where an empty selection narrows
+        nothing. Read literally it used to mean "exclude public and
+        exclude private", which can only ever return an empty result:
+        clearing both checkboxes emptied the table and looked like the
+        app had broken rather than like a filter had been cleared.
+        """
+        if not self.include_public and not self.include_private:
+            return True, True
+        return self.include_public, self.include_private
 
     @property
     def should_include_ils(self) -> bool:

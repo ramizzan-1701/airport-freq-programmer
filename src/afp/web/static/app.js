@@ -862,11 +862,14 @@ function renderFiltersInner() {
     },
   });
 
-  const typeSummary = selected.includePublic && selected.includePrivate
+  // Neither ticked reads the same as both: an empty selection narrows
+  // nothing, which is what every other group here does. The summary
+  // says so rather than announcing an empty result the filter no
+  // longer produces.
+  const typeSummary = selected.includePublic === selected.includePrivate
     ? "Public and private"
     : selected.includePublic ? "Public-use only"
-    : selected.includePrivate ? "Private-use only"
-    : "Neither — no entries";
+    : "Private-use only";
   accordionGroup(scopeSection, {
     key: "type",
     title: "Type",

@@ -82,8 +82,13 @@ def test_include_private_and_exclude_public(conn):
     private_only = apply_filters(conn, FilterState(include_public=False, include_private=True))
     assert _ids(private_only) == {"DDD"}
 
+    # Neither ticked is no constraint, the same as every other filter
+    # here: an empty selection narrows nothing. Read literally it would
+    # mean "exclude public and exclude private", which can only return
+    # an empty result -- clearing both boxes emptied the table and
+    # looked like a broken app rather than a cleared filter.
     neither = apply_filters(conn, FilterState(include_public=False, include_private=False))
-    assert _ids(neither) == set()
+    assert _ids(neither) == {"AAA", "BBB", "CCC", "DDD"}
 
 
 def test_freq_category_filter_narrows_frequencies_but_keeps_airport(conn):
@@ -441,9 +446,13 @@ def test_orphan_facility_filtered_by_radius_using_its_own_position(orphan_conn):
 def test_orphan_facility_ignores_public_private_filter(orphan_conn):
     """No FACILITY_USE_CODE-equivalent exists for standalone facilities --
     they must survive every combination of include_public/include_private,
-    including the "neither" combination that excludes every real airport.
+    including one that excludes every real airport in the fixture.
+
+    Private-only rather than the old "neither": neither now means no
+    constraint, which excludes nothing and so no longer tests this.
+    AAA is public, so private-only still drops it.
     """
-    result = apply_filters(orphan_conn, FilterState(include_public=False, include_private=False))
+    result = apply_filters(orphan_conn, FilterState(include_public=False, include_private=True))
     freq_airport_ids = {f.airport_id for f in result.frequencies}
     assert freq_airport_ids == {"AVE", "XYZ"}
     assert result.airports == []  # AAA correctly excluded
