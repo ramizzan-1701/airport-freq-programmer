@@ -598,6 +598,17 @@ main#app > .workspace,
   line-height: 1;
   font-variant-numeric: tabular-nums;
   color: var(--ok);
+  /* Wide enough for the largest count the dataset can produce -- about
+     25,000 nationwide in raw mode, so six characters, which measures
+     137px at this size. Without it the number resized as it rolled:
+     "entries (cap 400)" slid up to 108px beside it, and past three
+     digits the whole counter widened and pushed the breakdown panel
+     along with it.
+
+     Left-aligned on purpose. Right-aligning would hold the last digit
+     still but slide the number's left edge instead, away from the bar
+     it sits above -- more movement, not less. */
+  min-width: 140px;
 }
 .cap-text { font-size: 14px; color: var(--ink2); }
 

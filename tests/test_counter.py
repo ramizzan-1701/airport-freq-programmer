@@ -114,3 +114,20 @@ def test_reduced_motion_skips_the_roll():
     assert "prefers-reduced-motion: reduce" in APP_JS
     body = APP_JS.split("function renderCounter(result) {", 1)[1].split("\n}", 1)[0]
     assert "prefersReducedMotion()" in body
+
+
+def test_the_number_holds_its_width_so_nothing_moves_while_it_rolls():
+    """A rolling number that resizes drags the layout with it: the
+    "entries (cap N)" label slid up to 108px beside it, and past three
+    digits the counter widened and pushed the breakdown panel along too.
+
+    Tabular figures alone are not enough -- they keep each digit the
+    same width, but not the number the same width as digits come and go.
+    """
+    css = (STATIC_DIR / "style.css").read_text(encoding="utf-8")
+    rule = css.split(".count-number {", 1)[1].split("}", 1)[0]
+    assert "min-width:" in rule
+    assert "font-variant-numeric: tabular-nums" in rule
+    # Left-aligned: right-aligning would hold the last digit still but
+    # slide the number's left edge instead, away from the bar beneath it.
+    assert "text-align: right" not in rule
