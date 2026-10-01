@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from .. import RELEASE_DATE, __version__, about as about_copy, classification
-from ..counter import counter_status
+from ..counter import AMBER_THRESHOLD, counter_status
 from ..custom_entries import CustomGroupCapacityError
 from ..export.fta850l import FTA_850L
 from ..export.xml_reader import XmlParseError
@@ -467,6 +467,7 @@ def create_app(cache_dir: Path) -> FastAPI:
             total_count=total_count,
             level=status_result.level,
             cap=status_result.cap,
+            amber_threshold=AMBER_THRESHOLD,
             entries=entries_out,
             # Measured over what the table actually lists, not the FAA
             # rows alone: with 498 filtered and 6 custom, the page stops

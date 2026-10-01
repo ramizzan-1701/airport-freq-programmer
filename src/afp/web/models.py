@@ -266,6 +266,12 @@ class QueryResultOut(BaseModel):
     total_count: int
     level: Literal["green", "amber", "red"]
     cap: int
+    # The fraction of the cap at which the counter turns amber. Sent
+    # rather than repeated in the frontend because the rolling counter
+    # recolours itself from the value it is currently showing, not from
+    # `level` above -- which describes the destination. A second copy of
+    # the threshold would be free to drift from afp.counter's.
+    amber_threshold: float
     entries: list[EntryOut]
     truncated: bool
     custom_entry_count: int

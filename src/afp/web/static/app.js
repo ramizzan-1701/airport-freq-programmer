@@ -2287,38 +2287,149 @@ async function runQuery() {
   updateGenerateButton(result);
 }
 
-function renderCounter(result) {
-  const el = document.getElementById("counter");
-  el.className = "counter " + (result.level === "green" ? "" : result.level);
+// ---------- the live counter, and the dial it spins on ----------
+//
+// The number rolls to its new value rather than snapping, and the bar
+// and the colour travel with it. All three are driven by one tween: the
+// colour changes as the *shown* number crosses the cap, so a CSS
+// transition running the bar alongside would drift out of step with it.
+
+/** How long a roll takes, by how far it has to travel.
+ *
+ * A fixed duration is wrong at both ends: 395 to 396 over a second
+ * reads as lag, and a jump across the whole cap in the same time reads
+ * as a flicker. Tune the feel here -- perEntryMs is the dial's speed,
+ * the other two are the floor and ceiling it is held between.
+ */
+const COUNT_TWEEN = {
+  minMs: 180,
+  maxMs: 1000,
+  perEntryMs: 2.4,
+};
+
+function countTweenDuration(from, to) {
+  const distance = Math.abs(to - from);
+  return Math.min(
+    COUNT_TWEEN.maxMs,
+    Math.max(COUNT_TWEEN.minMs, distance * COUNT_TWEEN.perEntryMs)
+  );
+}
+
+/** Ease-out cubic: quick away, settling at the end -- a dial coming to
+ * rest rather than a value being set. */
+function easeOutCubic(t) {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+/** The value shown `elapsed` ms into a roll from `from` to `to`.
+ *
+ * Pure, so the feel of the thing can be tested without a browser.
+ * Rounded, since the counter is a whole number of entries at every
+ * frame, not a fraction of one.
+ */
+function countAt(from, to, elapsed, duration) {
+  if (duration <= 0 || elapsed >= duration) return to;
+  if (elapsed <= 0) return from;
+  return Math.round(from + (to - from) * easeOutCubic(elapsed / duration));
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+// What is on screen right now, which is where the next roll starts from.
+// Not the last result's count: a new result arriving mid-roll has to
+// pick up from where the dial actually is, or the number jumps back
+// before running forward again.
+let shownCount = null;
+let countFrame = null;
+let counterEls = null;
+
+/** Builds the counter's parts once. Rebuilding them per query is what
+ * made this impossible to animate: a fresh element has no previous
+ * value to travel from, so every change simply appeared.
+ */
+function buildCounter(el) {
   el.innerHTML = "";
 
   const line = document.createElement("div");
   line.className = "counter-line";
   const num = document.createElement("span");
   num.className = "count-number";
-  num.textContent = result.total_count;
   const cap = document.createElement("span");
   cap.className = "cap-text";
-  cap.textContent = `entries (cap ${result.cap})`;
   line.append(num, cap);
   el.appendChild(line);
 
   const bar = document.createElement("div");
   bar.className = "counter-bar";
   const fill = document.createElement("span");
-  // Clamped so an over-cap result fills the bar rather than overflowing
-  // it; the count and the slots line below carry the actual overage.
-  fill.style.width = `${Math.min(100, (result.total_count / result.cap) * 100)}%`;
   bar.appendChild(fill);
   el.appendChild(bar);
 
   const slots = document.createElement("div");
   slots.className = "counter-slots";
-  const remaining = result.cap - result.total_count;
-  slots.textContent = remaining >= 0
-    ? `${remaining} slots remaining`
-    : `${-remaining} over the cap`;
   el.appendChild(slots);
+
+  return { el, num, cap, fill, slots };
+}
+
+/** Paints the counter for one value -- the one being shown this frame,
+ * not the one being travelled to.
+ */
+function paintCounter(value, result) {
+  const { el, num, fill, slots } = counterEls;
+  num.textContent = value.toLocaleString();
+
+  // Clamped so an over-cap result fills the bar rather than overflowing
+  // it; the count and the slots line below carry the actual overage.
+  fill.style.width = `${Math.min(100, (value / result.cap) * 100)}%`;
+
+  // Recoloured from the value on screen, so the colour and the number
+  // always agree: the counter turns red as the digits cross the cap,
+  // not before they get there.
+  const level =
+    value > result.cap ? "red"
+    : value >= result.cap * result.amber_threshold ? "amber"
+    : "";
+  el.className = "counter " + level;
+
+  const remaining = result.cap - value;
+  slots.textContent = remaining >= 0
+    ? `${remaining.toLocaleString()} slots remaining`
+    : `${(-remaining).toLocaleString()} over the cap`;
+}
+
+function renderCounter(result) {
+  const el = document.getElementById("counter");
+  if (!counterEls || counterEls.el !== el || !el.firstChild) {
+    counterEls = buildCounter(el);
+    shownCount = null;
+  }
+  counterEls.cap.textContent = `entries (cap ${result.cap.toLocaleString()})`;
+
+  const target = result.total_count;
+  // The first result has nothing to travel from, and rolling up from
+  // zero on load would be decoration rather than feedback.
+  if (shownCount === null || prefersReducedMotion()) {
+    shownCount = target;
+    paintCounter(target, result);
+    renderBreakdown(result);
+    return;
+  }
+
+  if (countFrame !== null) cancelAnimationFrame(countFrame);
+  const from = shownCount;
+  const duration = countTweenDuration(from, target);
+  const started = performance.now();
+
+  const step = (now) => {
+    const elapsed = now - started;
+    shownCount = countAt(from, target, elapsed, duration);
+    paintCounter(shownCount, result);
+    countFrame = elapsed < duration ? requestAnimationFrame(step) : null;
+  };
+  countFrame = requestAnimationFrame(step);
 
   renderBreakdown(result);
 }
