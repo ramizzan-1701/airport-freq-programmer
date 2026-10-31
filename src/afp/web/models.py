@@ -73,6 +73,34 @@ class MapStatusOut(BaseModel):
     cycle_date: date
 
 
+class UiStateIn(BaseModel):
+    """The parts of the UI both windows have to agree about.
+
+    Not filter state: which rule is open changes nothing about the
+    query, so it is shared between windows but never persisted.
+    """
+
+    active_radius_id: str | None = None
+
+
+class SyncOut(BaseModel):
+    """What changed since the caller last looked.
+
+    Each half is sent only when it is newer than the revision the caller
+    quoted, so a poll that finds nothing new costs two integers. The
+    `source` fields carry the client id of whoever wrote it, which is how
+    a window tells its own change from someone else's.
+    """
+
+    filters_revision: int
+    filters: FilterStateIn | None = None
+    filters_source: str | None = None
+
+    ui_revision: int
+    ui: UiStateIn | None = None
+    ui_source: str | None = None
+
+
 class FilterStateIn(BaseModel):
     states: list[str] | None = None
     cities: list[str] | None = None

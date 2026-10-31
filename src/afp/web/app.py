@@ -10,7 +10,7 @@ from collections import Counter
 from datetime import date
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
@@ -59,6 +59,8 @@ from .models import (
     QueryResultOut,
     ResolvedCenterOut,
     StatusOut,
+    SyncOut,
+    UiStateIn,
     UpdateCheckOut,
 )
 from .state import AppState, LoadedCycle
@@ -160,10 +162,71 @@ def create_app(cache_dir: Path) -> FastAPI:
             return FilterStateIn()
 
     @app.put("/api/filters", response_model=FilterStateIn)
-    def save_filters(body: FilterStateIn) -> FilterStateIn:
+    def save_filters(
+        body: FilterStateIn,
+        x_client_id: str | None = Header(default=None),
+    ) -> FilterStateIn:
         state: AppState = app.state.afp_state
-        state.save_filters(body.model_dump(mode="json"))
+        # The writer's id rides along so the other window can tell this
+        # change from one of its own; see /api/sync.
+        state.save_filters(body.model_dump(mode="json"), source=x_client_id)
         return body
+
+    @app.put("/api/ui-state", response_model=UiStateIn)
+    def put_ui_state(
+        body: UiStateIn,
+        x_client_id: str | None = Header(default=None),
+    ) -> UiStateIn:
+        """UI state both windows share. Held in memory only: which rule
+        is open is worth agreeing about while the app runs and worth
+        nothing once it closes.
+        """
+        state: AppState = app.state.afp_state
+        # exclude_unset, or every field the caller left out would be
+        # merged in at its default and quietly clear what is there. A
+        # field sent as null is still set, so closing a rule travels.
+        patch = body.model_dump(mode="json", exclude_unset=True)
+        merged = state.set_ui_state(patch, source=x_client_id)
+        return UiStateIn(**merged)
+
+    @app.get("/api/sync", response_model=SyncOut)
+    def sync(
+        filters_since: int = Query(default=-1),
+        ui_since: int = Query(default=-1),
+    ) -> SyncOut:
+        """What has changed since the caller last looked.
+
+        Polled by each window a few times a second. Both halves are left
+        out when they are not newer than the revisions quoted, so the
+        common answer -- nothing happened -- is two integers rather than
+        a whole filter state.
+
+        Defaults of -1, not 0: revisions start at 0, so a caller that has
+        never synced has to be able to ask for a revision older than the
+        first one.
+        """
+        state: AppState = app.state.afp_state
+
+        filters: FilterStateIn | None = None
+        if state.filters_revision > filters_since:
+            saved = state.load_saved_filters()
+            try:
+                filters = FilterStateIn(**saved) if saved else FilterStateIn()
+            except ValidationError:
+                filters = FilterStateIn()
+
+        ui: UiStateIn | None = None
+        if state.ui_revision > ui_since:
+            ui = UiStateIn(**state.ui_state)
+
+        return SyncOut(
+            filters_revision=state.filters_revision,
+            filters=filters,
+            filters_source=state.filters_source if filters is not None else None,
+            ui_revision=state.ui_revision,
+            ui=ui,
+            ui_source=state.ui_source if ui is not None else None,
+        )
 
     @app.get("/api/check-update", response_model=UpdateCheckOut)
     def check_update() -> UpdateCheckOut:

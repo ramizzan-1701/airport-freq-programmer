@@ -76,6 +76,27 @@ class AppState:
         # show itself once ahead of the load screen.
         self.about_acknowledged: bool = local_store.load_about_acknowledged(self.about_path)
 
+        # ---- shared between windows ----
+        #
+        # The map opens in a window of its own, which is a separate JS
+        # context with its own copy of the filters. Rather than have the
+        # two try to talk to each other, each polls the server and the
+        # server is the one that is right.
+        #
+        # A revision counter per thing that can change, and the id of the
+        # client that last wrote it. The id is what stops an echo loop: a
+        # window ignores updates it caused, so applying one never
+        # re-writes it and bounces it back.
+        self.filters_revision: int = 0
+        self.filters_source: str | None = None
+
+        # The active rule is UI state, not filter state -- which window
+        # has a rule open changes nothing about the query, so it is held
+        # here and never written to filters.json.
+        self.ui_state: dict = {"active_radius_id": None}
+        self.ui_revision: int = 0
+        self.ui_source: str | None = None
+
     def available_cycles(self) -> list[date]:
         """Locally cached cycles that have all three required CSVs already
         extracted (i.e. a completed `fetch`), newest first.
@@ -298,8 +319,22 @@ class AppState:
         """
         return local_store.load_filters(self.filters_path)
 
-    def save_filters(self, filters: dict) -> None:
+    def save_filters(self, filters: dict, source: str | None = None) -> None:
         local_store.save_filters(self.filters_path, filters)
+        self.filters_revision += 1
+        self.filters_source = source
+
+    def set_ui_state(self, patch: dict, source: str | None = None) -> dict:
+        """Merge a patch into the shared UI state.
+
+        A patch rather than a replacement so a window can set the one
+        field it cares about without having to know, or round-trip,
+        whatever else ends up living here.
+        """
+        self.ui_state.update(patch)
+        self.ui_revision += 1
+        self.ui_source = source
+        return self.ui_state
 
     def acknowledge_about(self) -> None:
         self.about_acknowledged = True
