@@ -290,17 +290,52 @@
 
     let ringLayers = [];
 
+    /** The rules as they are right now, not as the last answer had them.
+     *
+     * `rings` is what the server resolved for the most recent query, so
+     * it is a debounce and a round trip behind: a dragged circle would
+     * stutter along after the cursor, a new one would stay blue for a
+     * moment after Add, and a deleted one would linger. The rail's copy
+     * is current and is what the user is actually editing, so it wins
+     * on size, mode and membership.
+     *
+     * The server is still needed for position: a centre typed into the
+     * rail has no coordinates on this side until it is resolved, and a
+     * rule we cannot place yet is simply not drawn -- it appears on the
+     * next answer.
+     */
+    function liveRings() {
+      const resolved = new Map(rings.map((r) => [r.id, r]));
+      const out = [];
+      for (const rule of hooks.rules()) {
+        const fallback = resolved.get(rule.id);
+        const lat = rule.lat == null ? fallback && fallback.lat : rule.lat;
+        const lon = rule.lon == null ? fallback && fallback.lon : rule.lon;
+        if (lat == null || lon == null) continue;
+        out.push({
+          id: rule.id,
+          center: rule.center,
+          lat,
+          lon,
+          radius_nm: rule.radius_nm,
+          mode: rule.mode,
+        });
+      }
+      return out;
+    }
+
     function drawRings() {
       ringLayers.forEach((l) => map.removeLayer(l));
       ringLayers = [];
       const activeId = hooks.activeId();
       const staged = hooks.staged();
+      const current = liveRings();
 
       // Excludes after includes so the hatch sits on top; the rule being
       // edited above everything.
       const ordered = [
-        ...rings.filter((r) => r.mode === "include"),
-        ...rings.filter((r) => r.mode === "exclude"),
+        ...current.filter((r) => r.mode === "include"),
+        ...current.filter((r) => r.mode === "exclude"),
       ];
       const active = ordered.find((r) => r.id === activeId);
       if (active) {
@@ -483,7 +518,9 @@
       }
 
       ctx.font = "600 11px 'IBM Plex Mono', ui-monospace, monospace";
-      const ordered = [...rings.filter((r) => r.id !== activeId), ...rings.filter((r) => r.id === activeId)];
+      // Live too: the centre's label carries the radius.
+      const current = liveRings();
+      const ordered = [...current.filter((r) => r.id !== activeId), ...current.filter((r) => r.id === activeId)];
       for (const r of ordered) {
         const pt = map.latLngToContainerPoint([r.lat, r.lon]);
         const colour = r.mode === "include" ? OK : WARN;
@@ -568,8 +605,9 @@
     }
 
     function hitRingCentre(pt) {
-      for (let i = rings.length - 1; i >= 0; i--) {
-        const r = rings[i];
+      const current = liveRings();
+      for (let i = current.length - 1; i >= 0; i--) {
+        const r = current[i];
         const p = map.latLngToContainerPoint([r.lat, r.lon]);
         if ((p.x - pt.x) ** 2 + (p.y - pt.y) ** 2 <= 144) return r; // 12px
       }
@@ -638,7 +676,7 @@
     toolbar.append(row1, row2, error);
 
     function activeRule() {
-      return rings.find((r) => r.id === hooks.activeId()) || null;
+      return liveRings().find((r) => r.id === hooks.activeId()) || null;
     }
 
     function showError(message) {
@@ -757,7 +795,7 @@
 
     function renderChips() {
       chipRow.innerHTML = "";
-      for (const r of rings) {
+      for (const r of liveRings()) {
         const chip = document.createElement("button");
         chip.type = "button";
         chip.className = "map-chip" + (r.id === hooks.activeId() ? " on" : "");
@@ -843,7 +881,7 @@
       } else {
         const [p, , , code] = hit;
         const use = p.public_use === null ? "facility" : p.public_use ? "public" : "private";
-        const distances = rings
+        const distances = liveRings()
           .map(
             (r) =>
               `${r.mode === "include" ? "+" : "−"} ` +
@@ -890,7 +928,7 @@
       const centre = hit
         ? hit[0].id
         : `${e.latlng.lat.toFixed(4)},${e.latlng.lng.toFixed(4)}`;
-      const existing = rings.find((r) => r.center === centre);
+      const existing = liveRings().find((r) => r.center === centre);
       if (existing) {
         hooks.setActive(existing.id);
         return;
@@ -967,6 +1005,19 @@
         counter.textContent = text;
         counter.className = "map-counter " + (level || "");
       },
+      /** What a slider tick needs and no more.
+       *
+       * redraw() also restyles the state outlines and rebuilds the
+       * legend, neither of which a radius change touches. The ring
+       * geometry and the centre's label (which carries the radius) do.
+       */
+      liveRedraw() {
+        syncToolbar();
+        drawRings();
+        renderChips();
+        renderHint();
+        queueDraw();
+      },
       invalidateSize() {
         map.invalidateSize();
         queueDraw();
@@ -985,7 +1036,7 @@
         return points;
       },
       get rings() {
-        return rings;
+        return liveRings();
       },
       get unplottable() {
         return unplottable;

@@ -1263,6 +1263,32 @@ function radiusLabel(rf) {
   return `${rf.mode === "include" ? "Within" : "Exclude"} ${rf.radius_nm}nm of ${rf.center}`;
 }
 
+/** Updates the open rail editor in place, without rebuilding the rail.
+ *
+ * Dragging the map's slider calls updateRule on every tick, and a full
+ * renderFilters costs ~36ms -- longer than a frame, to rebuild every
+ * group in the rail when the only thing that changed is one rule's own
+ * row. Falls back to the rebuild when the row is not on screen, which
+ * is the case the cheap path cannot cover.
+ */
+function syncRadiusRow(rule) {
+  const box = document.querySelector(".radius-item-editing");
+  if (!box || box.dataset.ruleId !== rule.id) {
+    renderFilters();
+    return;
+  }
+  const text = box.querySelector(".radius-item-text");
+  if (text) text.textContent = radiusLabel(rule);
+  const mode = box.querySelector(".radius-mode");
+  if (mode) mode.value = rule.mode;
+  // Not into a field being typed in: writing the value back would move
+  // the caret and fight the keystrokes.
+  const nm = box.querySelector(".radius-nm");
+  if (nm && document.activeElement !== nm) nm.value = rule.radius_nm;
+  const center = box.querySelector(".radius-center");
+  if (center && document.activeElement !== center) center.value = rule.center;
+}
+
 function removeRadiusFilter(id, onChange) {
   selected.radiusFilters = selected.radiusFilters.filter((r) => r.id !== id);
   if (activeRadiusId === id) activeRadiusId = null;
@@ -1318,6 +1344,9 @@ function radiusChip(rf, onChange) {
 function radiusEditor(rf, onChange) {
   const box = document.createElement("div");
   box.className = "radius-item radius-item-editing";
+  // So a live update can confirm it is patching the row it means to
+  // rather than whichever editor happens to be open.
+  box.dataset.ruleId = rf.id;
 
   // The chip keeps its label and its remove button while open, with the
   // fields added beneath. Replacing the chip wholesale hid both: the
@@ -2063,6 +2092,7 @@ async function resolveCenterOrMessage(center) {
 
 const mapHooks = {
   activeId: () => activeRadiusId,
+  rules: () => selected.radiusFilters,
   staged: () => stagedCenter,
   draftNm: () => mapDraft.radius_nm,
   draftMode: () => mapDraft.mode,
@@ -2110,7 +2140,17 @@ const mapHooks = {
     // starts from what was last dialled in.
     if (patch.radius_nm !== undefined) mapDraft.radius_nm = patch.radius_nm;
     if (patch.mode !== undefined) mapDraft.mode = patch.mode;
-    renderFilters();
+
+    // A centre can fail to resolve and can change which groups the rail
+    // shows, so that still rebuilds. A radius or a mode changes one row,
+    // and arrives once per slider tick.
+    if (patch.center !== undefined) renderFilters();
+    else syncRadiusRow(rule);
+
+    // The ring follows the slider rather than waiting for the query:
+    // the points cannot recolour until the server answers, but the
+    // circle is ours to draw and a 200ms lag on it reads as a stutter.
+    if (radiusMap) radiusMap.liveRedraw();
     scheduleQuery();
     return null;
   },
