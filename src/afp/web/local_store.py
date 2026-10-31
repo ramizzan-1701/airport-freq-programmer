@@ -82,3 +82,24 @@ def load_groups(path: Path) -> dict | None:
 def save_groups(path: Path, groups: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(groups), encoding="utf-8")
+
+
+def load_map_window(path: Path) -> dict | None:
+    """Where the radius map window was last, and whether it was open.
+
+    Returns None for a missing or unreadable file, same as the two
+    above: a corrupt one should put the window back at its default size,
+    not stop the app opening.
+    """
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def save_map_window(path: Path, placement: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(placement), encoding="utf-8")

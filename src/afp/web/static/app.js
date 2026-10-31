@@ -486,6 +486,9 @@ async function initWorkspace() {
   await loadCustomEntries();
   await loadGroups();
   await runQuery();
+  // Not awaited: in browser mode the shell check has a timeout, and
+  // nothing on screen depends on the answer.
+  restoreRadiusMap();
 }
 
 // ---------- saved filter selections ----------
@@ -2082,6 +2085,56 @@ let mapWindow = null; // the browser-mode popup, when there is one
 
 function inDesktopShell() {
   return !!(window.pywebview && window.pywebview.api && window.pywebview.api.open_map_window);
+}
+
+/** Resolves once pywebview's bridge exists, or false if it never does.
+ *
+ * `inDesktopShell()` is enough for a button, which is clicked long after
+ * the page settles. It is not enough at load: pywebview injects the api
+ * object and then fires `pywebviewready`, and a check that runs first
+ * reads the desktop app as a browser. The timeout is what makes the
+ * same code answer in a real browser, where the event never comes.
+ */
+function pywebviewReady(timeoutMs = 3000) {
+  if (inDesktopShell()) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const settle = () => {
+      clearTimeout(timer);
+      window.removeEventListener("pywebviewready", settle);
+      resolve(inDesktopShell());
+    };
+    const timer = setTimeout(settle, timeoutMs);
+    window.addEventListener("pywebviewready", settle, { once: true });
+  });
+}
+
+// Once per page load. initWorkspace() also runs after a cycle is
+// fetched mid-session, and a second restore there would raise the map
+// window over the main one just as the new cycle finished loading.
+let mapRestoreAttempted = false;
+
+/** Reopens the map window if it was open when the app last closed.
+ *
+ * Deliberately here rather than at startup in the shell: the map has
+ * nothing to draw until a cycle is loaded, and on a fresh install it
+ * would open over the About screen. This runs at the end of
+ * initWorkspace(), which is the first moment both are true.
+ *
+ * Desktop only. A browser blocks window.open outside a user gesture, so
+ * in browser mode the map is always opened by the button.
+ */
+async function restoreRadiusMap() {
+  if (mapRestoreAttempted) return;
+  mapRestoreAttempted = true;
+  if (!aboutAcknowledged) return;
+  if (!(await pywebviewReady())) return;
+  if (!window.pywebview.api.restore_map_window) return;
+  try {
+    await window.pywebview.api.restore_map_window();
+  } catch {
+    // The window not coming back is not worth a message: the button is
+    // right there in the rail.
+  }
 }
 
 /** Opens the map window, or brings back the one already open.

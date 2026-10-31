@@ -22,6 +22,7 @@ from afp.desktop import (
 )
 from afp.paths import APP_NAME, default_cache_dir
 from afp.web import create_app
+from afp.web.state import AppState
 
 
 @pytest.fixture
@@ -192,7 +193,25 @@ def test_closing_the_main_window_takes_the_map_with_it():
     assert "window.events.closing += map_window.close_if_open" in source
 
 
-def test_a_second_open_reuses_the_window_rather_than_stacking_them():
+class FakeEvent:
+    """pywebview's Event, as far as MapWindow uses it."""
+
+    def __init__(self) -> None:
+        self.handlers = []
+
+    def __iadd__(self, handler):
+        self.handlers.append(handler)
+        return self
+
+
+class FakeEvents:
+    def __init__(self) -> None:
+        self.resized = FakeEvent()
+        self.moved = FakeEvent()
+        self.closed = FakeEvent()
+
+
+def test_a_second_open_reuses_the_window_rather_than_stacking_them(tmp_path):
     """"Open map" is not a toggle -- the user can close the window
     itself, which this side is never told about -- so pressing it again
     with one already open has to raise that one, not add another.
@@ -201,6 +220,9 @@ def test_a_second_open_reuses_the_window_rather_than_stacking_them():
     shown = []
 
     class FakeWindow:
+        def __init__(self):
+            self.events = FakeEvents()
+
         def show(self):
             shown.append(self)
 
@@ -221,7 +243,7 @@ def test_a_second_open_reuses_the_window_rather_than_stacking_them():
     desktop.webview.create_window = fake_create_window
     desktop.webview.windows = fake_windows
     try:
-        manager = desktop.MapWindow("http://127.0.0.1:1234")
+        manager = desktop.MapWindow("http://127.0.0.1:1234", AppState(cache_dir=tmp_path))
         manager.open_map_window()
         manager.open_map_window()
         assert len(fake_windows) == 1, "a second press opened another window"
@@ -231,7 +253,7 @@ def test_a_second_open_reuses_the_window_rather_than_stacking_them():
         desktop.webview.windows = original_list
 
 
-def test_a_window_the_user_already_closed_is_opened_again():
+def test_a_window_the_user_already_closed_is_opened_again(tmp_path):
     """Closing it leaves the Python object behind, so "is one open"
     cannot be answered from the reference alone -- only by asking
     pywebview what it still has.
@@ -239,6 +261,9 @@ def test_a_window_the_user_already_closed_is_opened_again():
     import afp.desktop as desktop
 
     class FakeWindow:
+        def __init__(self):
+            self.events = FakeEvents()
+
         def show(self):
             raise AssertionError("showed a window the user had closed")
 
@@ -258,7 +283,7 @@ def test_a_window_the_user_already_closed_is_opened_again():
     desktop.webview.create_window = fake_create_window
     desktop.webview.windows = live
     try:
-        manager = desktop.MapWindow("http://127.0.0.1:1234")
+        manager = desktop.MapWindow("http://127.0.0.1:1234", AppState(cache_dir=tmp_path))
         manager.open_map_window()
         live.clear()  # the user closed it
         manager.open_map_window()

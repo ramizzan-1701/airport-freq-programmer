@@ -96,6 +96,7 @@ class AppState:
         self.about_path = self.cache_dir / "about.json"
         self.filters_path = self.cache_dir / "filters.json"
         self.groups_path = self.cache_dir / "groups.json"
+        self.map_window_path = self.cache_dir / "map_window.json"
         self.custom_entries: list[Entry] = local_store.load_custom_entries(self.custom_entries_path)
 
         # Which of the two naming schemes the six managed groups use, and
@@ -357,6 +358,18 @@ class AppState:
         local_store.save_filters(self.filters_path, filters)
         self.filters_revision += 1
         self.filters_source = source
+
+    def load_map_window_placement(self) -> dict | None:
+        """Where the radius map window was last, and whether it was open.
+
+        Read from disk on demand rather than cached: it is written by the
+        desktop shell when that window moves or closes, and read once
+        when it opens, so there is no reason for a second copy in here.
+        """
+        return local_store.load_map_window(self.map_window_path)
+
+    def save_map_window_placement(self, placement: dict) -> None:
+        local_store.save_map_window(self.map_window_path, placement)
 
     def set_ui_state(self, patch: dict, source: str | None = None) -> dict:
         """Merge a patch into the shared UI state.

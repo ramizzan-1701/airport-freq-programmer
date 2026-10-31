@@ -17,6 +17,10 @@ you whether the current selection fits on the radio before you generate anything
   "Advanced" toggle).
 - **Filters** by location, radius, frequency category, site type, and facility status,
   with a live entry counter against the radio's 400-memory cap.
+- **Draws the radius filter on a map.** Open it in a window of its own: every airport
+  in the cycle, coloured by why it is in or out, with rings you place by clicking and
+  resize with a slider while the counter follows. The outlines ship with the app, so
+  there is no tile server and nothing is fetched while you use it.
 - **Preserves your own entries.** Import your current radio export and any memories that
   aren't in the app's six generated groups are held aside and merged back into every
   future export, untouched.

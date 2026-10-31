@@ -21,9 +21,13 @@ gets a chip like "Within 60nm of LAX", and has to trust the counter. This featur
 2. **A radius map** that shows every rule as a ring, every airport coloured by *why* it is in
    or out, and the state/city filters. Rings can be created and edited directly on the map,
    with a slider that resizes the active ring live while the counter follows.
-3. **Two placements for the map:** docked inside the main window, or popped out into its own
-   window that can stay open beside the main one. Both stay in sync with the filter rail in
-   both directions.
+3. **The map in a window of its own,** which can stay open beside the main one and stays in
+   sync with the filter rail in both directions.
+
+   This started as two placements -- docked inside the main window, or popped out. The docked
+   one was built and then removed: the main window is already dense, and a map squeezed above
+   the results table read as one more thing competing for the same column. Everything below
+   that describes docking is kept for the record and marked.
 
 The rail's typed form stays as the manual input path. The map is the visual path. Both edit the
 same list of rules.
@@ -232,8 +236,8 @@ coordinates on every slider tick would be wasteful.
 ### 4.3 Frontend structure
 
 - **`static/map.js`** (new): the map component — Leaflet setup, state outlines, point canvas,
-  rings, hit-testing, toolbar, chips, legend. It is mounted either into a docked panel in
-  `index.html` or into a standalone `static/map.html` served at `GET /map`.
+  rings, hit-testing, toolbar, chips, legend. It is mounted into `static/map.html`, served at
+  `GET /map`. (Originally also into a docked panel in `index.html`; that placement is gone.)
 - **Point rendering:** one `<canvas>` overlay redrawn on `move`/`zoom`/`resize`, coalesced
   through `requestAnimationFrame`, with hit-testing over the drawn points. Thousands of SVG
   markers or `L.circleMarker`s are too slow. The prototype's `drawPoints()`/`hitTest()` show the
@@ -305,15 +309,26 @@ source of truth**, using the polling pattern the app already uses for fetch prog
     documentation for the version pinned; if macOS misbehaves, this is the first place to look.
 - **Browser mode (`afp serve`):** `window.open("/map", "afp-radius-map", "popup,width=720,height=640")`.
   If it returns null (popup blocked), fall back to the docked placement and say so in one line.
-- **Docked placement:**
-  - A collapsible panel between the counter band and the results table, inside `.results`.
-  - The 1180×760 floor in `desktop.py` was measured with the table **just** fitting. The docked
-    panel must therefore be resizable, with a cap (e.g. ≤ 45% of the results column), and must
-    never push the table off screen at the minimum window size. Verify against that comment's
-    20-category case.
-- **Default:** pop-out in the desktop app, docked in browser mode.
-- Remember the placement and the open/closed state across sessions (`local_store`, alongside
-  filters), but **not** the active rule.
+- ~~**Docked placement.**~~ **Removed.** It was built (a collapsible panel between the counter
+  band and the results table) and then taken out: too much in one column. There is no fallback
+  placement, so a blocked pop-up in browser mode now says so rather than docking.
+  The 1180×760 floor in `desktop.py` is therefore unaffected by the map; re-verified against
+  that comment's 20-category case with the panel gone (table top 596px of 760, no page scroll).
+- **Placement memory.** The map window's size and position are remembered across sessions in
+  `map_window.json` beside the filters, along with whether it was open — **not** the active
+  rule, which is UI state for one session.
+  - The numbers come from pywebview's `resized`/`moved` events, not from the page. Inside a
+    webview there is no browser chrome, so JS reads the content box as the whole window, and
+    restoring that as the window size would lose the title bar's height on every launch.
+  - A saved position is only reused if a title-bar-sized point on it still falls on an attached
+    screen, and the size is capped to that screen. The case this exists for is a second monitor
+    that is no longer plugged in: the coordinates stay valid and the window opens where nothing
+    can be seen or dragged.
+  - If it was open at the last quit it reopens — but from the main window, at the end of
+    `initWorkspace()`, not at startup: the map has nothing to draw before a cycle is loaded,
+    and on a fresh install it would open over the About screen.
+  - Desktop only. A browser blocks `window.open` outside a user gesture, so in browser mode the
+    map is always opened by the button.
 
 ## 5. Edge cases
 
@@ -367,11 +382,12 @@ Follow the existing style: pytest, plain-language names, and docstrings that say
 - `tests/test_filter_rail.py`-style static checks for `map.js` / CSS where useful, e.g. the
   vendor paths referenced in HTML exist in `package-data`.
 - **Manual checklist (both platforms):**
-  - pop out, then dock, then close and reopen;
+  - open, close, and open again;
+  - move and resize it, quit, relaunch: it comes back where it was, and only if it was open;
   - edit in the rail and watch the map; edit on the map and watch the rail;
   - drag the slider and watch the counter roll;
   - Esc;
-  - try a 1180×760 window with the panel docked.
+  - try the map window at its 520×460 floor.
 
 ## 7. Suggested order of work (one PR each)
 
@@ -396,8 +412,7 @@ Follow the existing style: pytest, plain-language names, and docstrings that say
   default and fallback.
 - **ICAO aliases.** Accept `KWVI` as `WVI` in `/api/resolve-center`. It would need a lookup
   column from APT_BASE.
-- **Docked default.** Whether the desktop app should open the map docked when the window is
-  large enough.
+- ~~**Docked default.**~~ **Decided:** there is no docked placement. See §4.6.
 
 ## 9. How the prototype differs from the real app
 

@@ -57,6 +57,12 @@ FEATURES: tuple[tuple[str, str], ...] = (
         "with a live entry counter against the radio's 400-memory cap.",
     ),
     (
+        "Draws",
+        "a map of every airport in the cycle, coloured by why it is in or out, so a "
+        "geographic radius can be placed by clicking and resized by eye. It ships with "
+        "the app and needs no connection.",
+    ),
+    (
         "Preserves your own radio entries.",
         "Import your current radio export and they will be "
         "merged back into the app's export, untouched.",

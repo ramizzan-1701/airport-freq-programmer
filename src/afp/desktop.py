@@ -19,6 +19,7 @@ import webview
 
 from .paths import default_cache_dir
 from .web import create_app
+from .web.state import AppState
 
 WINDOW_TITLE = "FTA-850 Frequency Manager"
 _STARTUP_TIMEOUT_S = 30.0
@@ -60,12 +61,25 @@ webview.settings["ALLOW_DOWNLOADS"] = True
 webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
 
 
+def _screens() -> list:
+    """The attached displays, as pywebview reports them.
+
+    Wrapped rather than read inline because `webview.screens` is not a
+    plain attribute: reading it starts the GUI toolkit if it is not
+    running yet. That is exactly right inside the app and exactly wrong
+    inside a test, which wants to say what the displays are without
+    opening a window to find out.
+    """
+    return list(webview.screens)
+
+
 class ServerStartupError(RuntimeError):
     """uvicorn never reached a bound-and-listening state."""
 
 
 class MapWindow:
-    """Opens and closes the radius map's own window.
+    """Opens and closes the radius map's own window, and remembers where
+    the user put it.
 
     Exposed to the page as `pywebview.api`, so the rail's "Open map"
     button can ask for a real OS window rather than a panel inside the
@@ -76,11 +90,100 @@ class MapWindow:
     JS bridge thread, not thread 0. pywebview marshals create_window
     onto the GUI thread itself, so this is its problem and not ours --
     but it is the first place to look if macOS misbehaves.
+
+    Placement lives here rather than in the page because the page cannot
+    see it. Inside a webview there is no browser chrome, so JS reads the
+    content box as the whole window: restoring that as the window size
+    would lose the title bar's height on every launch and the window
+    would creep smaller each session. pywebview's resized/moved events
+    report the real frame, in logical pixels on both platforms.
     """
 
-    def __init__(self, base_url: str) -> None:
+    def __init__(self, base_url: str, state: AppState) -> None:
         self._base_url = base_url
+        self._state = state
         self._window = None
+        # The last frame the OS reported, or None before the first event.
+        # Kept in memory and written on open and close rather than on
+        # every event: `moved` fires continuously through a drag.
+        self._frame: dict | None = None
+        # pywebview runs each event handler on a thread of its own, so a
+        # move arriving mid-close would otherwise have two threads in
+        # the same dict and the same file.
+        self._lock = threading.Lock()
+
+    # ---------- placement ----------
+
+    def _record_frame(self, **frame: int) -> None:
+        """Remember a size or a position the OS just reported.
+
+        Filters the obviously unusable rather than everything unusable:
+        a minimised window reports (-32000, -32000) on Windows, and
+        persisting that would hide the window on the next launch. The
+        full check happens on the way back out, where the screens are
+        worth asking about.
+        """
+        if "width" in frame and min(frame["width"], frame["height"]) < 1:
+            return
+        if "x" in frame and min(frame["x"], frame["y"]) < -10_000:
+            return
+        with self._lock:
+            self._frame = {**(self._frame or {}), **frame}
+
+    def _save(self, *, is_open: bool) -> None:
+        with self._lock:
+            placement = {**(self._frame or {}), "open": is_open}
+            try:
+                self._state.save_map_window_placement(placement)
+            except OSError:
+                # Losing the remembered position is not worth failing
+                # a window open or a quit over.
+                pass
+
+    def _restore_geometry(self) -> dict:
+        """create_window kwargs for where the window was last.
+
+        A saved position is only used if the window would come back
+        somewhere the user can reach it. The case this exists for is a
+        second monitor that is no longer plugged in: the position is
+        still perfectly valid, and the window opens where nothing can
+        be seen or dragged.
+        """
+        saved = self._state.load_map_window_placement() or {}
+        try:
+            width = int(saved["width"])
+            height = int(saved["height"])
+        except (KeyError, TypeError, ValueError):
+            return {}
+
+        width = max(width, MAP_WINDOW_MIN_SIZE[0])
+        height = max(height, MAP_WINDOW_MIN_SIZE[1])
+
+        try:
+            x = int(saved["x"])
+            y = int(saved["y"])
+        except (KeyError, TypeError, ValueError):
+            return {"width": width, "height": height}
+
+        # Where the title bar would land. If that point is on a screen,
+        # the window can be moved; if it is not, nothing about the
+        # window can be reached, however valid the numbers look.
+        grab = (x + 60, y + 20)
+        for screen in _screens():
+            on_x = screen.x <= grab[0] < screen.x + screen.width
+            on_y = screen.y <= grab[1] < screen.y + screen.height
+            if on_x and on_y:
+                # A window sized for a screen that is no longer there
+                # would open mostly past the edge of this one.
+                return {
+                    "width": min(width, screen.width),
+                    "height": min(height, screen.height),
+                    "x": x,
+                    "y": y,
+                }
+        return {"width": width, "height": height}
+
+    # ---------- the window ----------
 
     def open_map_window(self) -> bool:
         # A window the user has closed leaves its Python object behind,
@@ -88,14 +191,36 @@ class MapWindow:
         if self._window is not None and self._window in webview.windows:
             self._window.show()
             return True
+
+        geometry = {
+            "width": MAP_WINDOW_SIZE[0],
+            "height": MAP_WINDOW_SIZE[1],
+            **self._restore_geometry(),
+        }
+        with self._lock:
+            self._frame = dict(geometry)
         self._window = webview.create_window(
             MAP_WINDOW_TITLE,
             f"{self._base_url}/map",
-            width=MAP_WINDOW_SIZE[0],
-            height=MAP_WINDOW_SIZE[1],
             min_size=MAP_WINDOW_MIN_SIZE,
+            **geometry,
         )
+        self._window.events.resized += self._on_resized
+        self._window.events.moved += self._on_moved
+        self._window.events.closed += self._on_closed
+        self._save(is_open=True)
         return True
+
+    def restore_map_window(self) -> bool:
+        """Reopen the map if it was open when the app last closed.
+
+        Called by the main window once a cycle is loaded, not at
+        startup: the map has nothing to draw before then, and on a fresh
+        install it would open over the About screen.
+        """
+        if (self._state.load_map_window_placement() or {}).get("open"):
+            return self.open_map_window()
+        return False
 
     def close_map_window(self) -> bool:
         window, self._window = self._window, None
@@ -109,8 +234,27 @@ class MapWindow:
         pywebview keeps the process alive while any window is open, so a
         map window left behind would outlive the app it belongs to and
         hold the server thread open with it.
+
+        The map being open at this moment is the state to remember: the
+        user left it open, so it comes back next launch. Written before
+        the destroy, because destroying it fires `closed` -- which means
+        "the user shut it" everywhere else.
         """
+        if self._window is not None and self._window in webview.windows:
+            self._save(is_open=True)
         self.close_map_window()
+
+    # ---------- OS events ----------
+
+    def _on_resized(self, width: int, height: int) -> None:
+        self._record_frame(width=int(width), height=int(height))
+
+    def _on_moved(self, x: int, y: int) -> None:
+        self._record_frame(x=int(x), y=int(y))
+
+    def _on_closed(self) -> None:
+        self._window = None
+        self._save(is_open=False)
 
 
 def _wait_for_port(server: uvicorn.Server, timeout_s: float = _STARTUP_TIMEOUT_S) -> int:
@@ -155,7 +299,7 @@ def main() -> int:
         raise
 
     base_url = f"http://127.0.0.1:{port}"
-    map_window = MapWindow(base_url)
+    map_window = MapWindow(base_url, app.state.afp_state)
     window = webview.create_window(
         WINDOW_TITLE,
         base_url,
