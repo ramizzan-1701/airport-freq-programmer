@@ -529,6 +529,27 @@ main#app > .workspace,
 }
 .radius-item button:hover { color: var(--warn); }
 
+/* A chip at rest is a button: clicking it opens the rule for editing,
+   so it should look like it does something. */
+.radius-item[role="button"] { cursor: pointer; }
+.radius-item[role="button"]:hover { border-color: var(--line); }
+.radius-item[role="button"]:focus-visible { outline: 1px solid var(--acc); outline-offset: 1px; }
+.radius-item-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.radius-remove { flex: none; }
+
+/* The rule being edited. Accented rather than merely outlined: with
+   several rules listed, which one the fields belong to has to be
+   obvious at a glance. */
+.radius-item-editing {
+  display: block;
+  border-color: var(--acc);
+  padding: 8px 9px;
+  cursor: default;
+}
+.radius-item-head { display: flex; align-items: center; }
+.radius-edit-row { display: flex; gap: 6px; align-items: center; margin-top: 7px; }
+.radius-item-editing .field-error { margin-top: 6px; }
+
 .radius-form { display: flex; gap: 6px; }
 
 /* Sits under the field that caused it, in the same pink the over-cap
@@ -538,9 +559,12 @@ main#app > .workspace,
   font-size: 11.5px;
   color: var(--warn);
 }
-.radius-form input.invalid { border-color: var(--warn); }
+.radius-form input.invalid,
+.radius-edit-row input.invalid { border-color: var(--warn); }
 .radius-form input,
-.radius-form select {
+.radius-form select,
+.radius-edit-row input,
+.radius-edit-row select {
   background: var(--input);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -551,25 +575,35 @@ main#app > .workspace,
   min-width: 0;
 }
 .radius-form input:focus,
-.radius-form select:focus { border-color: var(--acc); outline: none; }
-.radius-form input::placeholder { color: var(--ink3); }
+.radius-form select:focus,
+.radius-edit-row input:focus,
+.radius-edit-row select:focus { border-color: var(--acc); outline: none; }
+.radius-form input::placeholder,
+.radius-edit-row input::placeholder { color: var(--ink3); }
 
 /* The centre field takes whatever the fixed-width controls leave; the
    others are sized to their actual content so nothing clips. */
-.radius-form .radius-center { flex: 1 1 auto; min-width: 0; }
-.radius-form .radius-nm { flex: none; width: 46px; }  /* 4 digits is the most anyone needs */
+.radius-form .radius-center,
+.radius-edit-row .radius-center { flex: 1 1 auto; min-width: 0; }
+.radius-form .radius-nm,
+.radius-edit-row .radius-nm { flex: none; width: 46px; }  /* 4 digits is the most anyone needs */
 
 /* No spinner. Nobody nudges a radius one mile at a time, and the arrows
    eat a third of a field this narrow. Stays type="number" so the numeric
    keypad and min=0 validation still apply -- only the control is hidden. */
 .radius-form .radius-nm::-webkit-outer-spin-button,
-.radius-form .radius-nm::-webkit-inner-spin-button {
+.radius-form .radius-nm::-webkit-inner-spin-button,
+.radius-edit-row .radius-nm::-webkit-outer-spin-button,
+.radius-edit-row .radius-nm::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
-.radius-form .radius-nm { -moz-appearance: textfield; appearance: textfield; }
-.radius-form .radius-mode { flex: none; }
-.radius-form .btn { flex: none; padding: 6px 9px; }
+.radius-form .radius-nm,
+.radius-edit-row .radius-nm { -moz-appearance: textfield; appearance: textfield; }
+.radius-form .radius-mode,
+.radius-edit-row .radius-mode { flex: none; }
+.radius-form .btn,
+.radius-edit-row .btn { flex: none; padding: 6px 9px; }
 
 /* ---------- results panel ---------- */
 .results {

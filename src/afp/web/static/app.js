@@ -245,7 +245,12 @@ function buildFilterPayload() {
     include_non_site_facilities: selected.includeNonSiteFacilities,
     ils_component_statuses: selected.ilsStatuses.size ? [...selected.ilsStatuses] : null,
     ils_system_types: selected.ilsSystemTypes.size ? [...selected.ilsSystemTypes] : null,
-    radius_filters: selected.radiusFilters,
+    radius_filters: selected.radiusFilters.map((rf) => ({
+      id: rf.id,
+      center: rf.center,
+      radius_nm: rf.radius_nm,
+      mode: rf.mode,
+    })),
     include_public: selected.includePublic,
     include_private: selected.includePrivate,
     mode: selected.mode,
@@ -544,7 +549,19 @@ async function resolvableRadiusFilters(saved) {
     if (!rf || !rf.center) continue;
     try {
       const res = await api(`/api/resolve-center?center=${encodeURIComponent(rf.center)}`);
-      if (res.ok) kept.push({ center: rf.center, radius_nm: rf.radius_nm, mode: rf.mode });
+      if (!res.ok) continue;
+      const body = await res.json().catch(() => ({}));
+      kept.push({
+        // Saved files written before rules had ids get one here. A rule
+        // without an id can never be the active one, so it would be
+        // uneditable on the map.
+        id: rf.id || newRadiusId(),
+        center: rf.center,
+        radius_nm: rf.radius_nm,
+        mode: rf.mode,
+        lat: body.lat,
+        lon: body.lon,
+      });
     } catch {
       // Offline or mid-reload: leaving it out is the safe direction.
     }
@@ -1225,6 +1242,212 @@ async function refreshCityOptions() {
   if (openGroup === "city") renderFilters();
 }
 
+// ---------- radius rules ----------
+//
+// One list of rules, edited from the rail today and from the map later.
+// At most one is "active" -- being edited -- and that is UI state rather
+// than filter state: it changes nothing about what the export contains,
+// so it never reaches filters.json.
+
+let activeRadiusId = null;
+
+/** A short id so a rule keeps its identity across reordering and
+ * removal. Without one, "the active rule" could only be an index, and
+ * deleting a rule above it would silently move the edit to its
+ * neighbour. */
+function newRadiusId() {
+  return Math.random().toString(36).slice(2, 8);
+}
+
+function radiusLabel(rf) {
+  return `${rf.mode === "include" ? "Within" : "Exclude"} ${rf.radius_nm}nm of ${rf.center}`;
+}
+
+function removeRadiusFilter(id, onChange) {
+  selected.radiusFilters = selected.radiusFilters.filter((r) => r.id !== id);
+  if (activeRadiusId === id) activeRadiusId = null;
+  onChange();
+  scheduleQuery();
+}
+
+/** A rule at rest. Clicking anywhere but the remove button opens it. */
+function radiusChip(rf, onChange) {
+  const item = document.createElement("div");
+  item.className = "radius-item";
+  item.tabIndex = 0;
+  item.setAttribute("role", "button");
+  item.title = "Click to edit";
+
+  const text = document.createElement("span");
+  text.className = "radius-item-text";
+  text.textContent = radiusLabel(rf);
+  item.appendChild(text);
+
+  const activate = () => {
+    activeRadiusId = rf.id;
+    onChange();
+  };
+  item.addEventListener("click", activate);
+  item.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      activate();
+    }
+  });
+
+  const rm = document.createElement("button");
+  rm.className = "radius-remove";
+  rm.textContent = "✕";
+  rm.title = "Remove";
+  rm.addEventListener("click", (event) => {
+    // The chip's own click would reopen what was just removed.
+    event.stopPropagation();
+    removeRadiusFilter(rf.id, onChange);
+  });
+  item.appendChild(rm);
+  return item;
+}
+
+/** The active rule, opened in place.
+ *
+ * Deliberately does not re-render itself as the user types: the list is
+ * rebuilt from scratch on every change, which would take the focused
+ * field out from under them mid-edit. Only activating, removing, or
+ * pressing Done rebuilds.
+ */
+function radiusEditor(rf, onChange) {
+  const box = document.createElement("div");
+  box.className = "radius-item radius-item-editing";
+
+  // The chip keeps its label and its remove button while open, with the
+  // fields added beneath. Replacing the chip wholesale hid both: the
+  // rule being edited no longer said what it was, and deleting it meant
+  // closing the editor first.
+  const head = document.createElement("div");
+  head.className = "radius-item-head";
+  const text = document.createElement("span");
+  text.className = "radius-item-text";
+  text.textContent = radiusLabel(rf);
+  const rm = document.createElement("button");
+  rm.className = "radius-remove";
+  rm.textContent = "✕";
+  rm.title = "Remove";
+  rm.addEventListener("click", () => removeRadiusFilter(rf.id, onChange));
+  head.append(text, rm);
+  box.appendChild(head);
+
+  const row = document.createElement("div");
+  row.className = "radius-edit-row";
+
+  const center = document.createElement("input");
+  center.className = "radius-center";
+  center.value = rf.center;
+  center.setAttribute("aria-label", "Center");
+
+  const nm = document.createElement("input");
+  nm.className = "radius-nm";
+  nm.type = "number";
+  nm.min = "0";
+  nm.value = rf.radius_nm;
+  nm.setAttribute("aria-label", "Radius in nautical miles");
+
+  const mode = document.createElement("select");
+  mode.className = "radius-mode";
+  for (const [value, text] of [["include", "Include"], ["exclude", "Exclude"]]) {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = text;
+    mode.appendChild(opt);
+  }
+  mode.value = rf.mode;
+
+  const done = document.createElement("button");
+  done.className = "btn btn-small";
+  done.textContent = "Done";
+
+  row.append(center, nm, mode, done);
+  box.appendChild(row);
+
+  const error = document.createElement("div");
+  error.className = "field-error";
+  error.setAttribute("role", "alert");
+  error.hidden = true;
+  box.appendChild(error);
+
+  function clearError() {
+    error.hidden = true;
+    error.textContent = "";
+    center.classList.remove("invalid");
+    center.removeAttribute("aria-invalid");
+  }
+  function showError(message) {
+    error.textContent = message;
+    error.hidden = false;
+    center.classList.add("invalid");
+    center.setAttribute("aria-invalid", "true");
+  }
+  center.addEventListener("input", clearError);
+
+  // Live, on input: the counter is the only feedback a radius has until
+  // the map lands, and waiting for a commit turns tuning a number into
+  // guess-and-check.
+  nm.addEventListener("input", () => {
+    const value = parseFloat(nm.value);
+    if (!Number.isFinite(value) || value <= 0) return;
+    rf.radius_nm = value;
+    text.textContent = radiusLabel(rf);
+    scheduleQuery();
+  });
+  mode.addEventListener("change", () => {
+    rf.mode = mode.value;
+    text.textContent = radiusLabel(rf);
+    scheduleQuery();
+  });
+
+  // On commit rather than on input: every keystroke of "LAX" is its own
+  // unresolvable centre, and each would clear the rule.
+  async function commitCenter() {
+    const typed = center.value.trim();
+    if (!typed || typed === rf.center) return;
+    try {
+      const res = await api(`/api/resolve-center?center=${encodeURIComponent(typed)}`);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showError(body.detail || "Couldn't find that location.");
+        center.value = rf.center; // the rule keeps the centre it had
+        return;
+      }
+      clearError();
+      rf.center = body.center || typed;
+      text.textContent = radiusLabel(rf);
+      // Cached so the map can draw the ring without resolving it again.
+      // Display only; buildFilterPayload strips it.
+      rf.lat = body.lat;
+      rf.lon = body.lon;
+      center.value = rf.center;
+      scheduleQuery();
+    } catch {
+      showError("Couldn't check that location.");
+      center.value = rf.center;
+    }
+  }
+  center.addEventListener("blur", commitCenter);
+  center.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitCenter();
+    }
+  });
+
+  done.addEventListener("click", () => {
+    activeRadiusId = null;
+    onChange();
+  });
+
+  return box;
+}
+
+
 function renderRadiusFilters(container) {
   // Outside the accordion deliberately: this is a form you fill in, not
   // a selection set you pick from, so there's no list to collapse and no
@@ -1241,21 +1464,13 @@ function renderRadiusFilters(container) {
 
   function renderList() {
     list.innerHTML = "";
-    selected.radiusFilters.forEach((rf, idx) => {
-      const item = document.createElement("div");
-      item.className = "radius-item";
-      item.textContent = `${rf.mode === "include" ? "Within" : "Exclude"} ${rf.radius_nm}nm of ${rf.center}`;
-      const rm = document.createElement("button");
-      rm.textContent = "✕";
-      rm.title = "Remove";
-      rm.addEventListener("click", () => {
-        selected.radiusFilters.splice(idx, 1);
-        renderList();
-        scheduleQuery();
-      });
-      item.appendChild(rm);
-      list.appendChild(item);
-    });
+    for (const rf of selected.radiusFilters) {
+      list.appendChild(
+        rf.id && rf.id === activeRadiusId
+          ? radiusEditor(rf, renderList)
+          : radiusChip(rf, renderList)
+      );
+    }
   }
   renderList();
 
@@ -1324,6 +1539,8 @@ function renderRadiusFilters(container) {
     if (!Number.isFinite(radiusNm) || radiusNm <= 0) return showError("Enter a distance in NM.");
 
     let resolved = center;
+    let resolvedLat = null;
+    let resolvedLon = null;
     addBtn.disabled = true;
     try {
       const res = await api(`/api/resolve-center?center=${encodeURIComponent(center)}`);
@@ -1332,6 +1549,8 @@ function renderRadiusFilters(container) {
       // Store what the server matched, not what was typed, so the chip
       // reads "60nm of LAX" for someone who typed "lax".
       resolved = body.center || center;
+      resolvedLat = body.lat;
+      resolvedLon = body.lon;
     } catch {
       return showError("Couldn't check that location.");
     } finally {
@@ -1339,7 +1558,16 @@ function renderRadiusFilters(container) {
     }
 
     clearError();
-    selected.radiusFilters.push({ center: resolved, radius_nm: radiusNm, mode: modeSelect.value });
+    // Not activated: the typed form is the manual path, and someone who
+    // has just filled it in has already said what they wanted.
+    selected.radiusFilters.push({
+      id: newRadiusId(),
+      center: resolved,
+      radius_nm: radiusNm,
+      mode: modeSelect.value,
+      lat: resolvedLat,
+      lon: resolvedLon,
+    });
     centerInput.value = "";
     radiusInput.value = "";
     renderList();
