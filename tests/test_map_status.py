@@ -343,3 +343,38 @@ def test_the_swatch_is_drawn_in_the_ring_colours():
     assert "var(--ok)" in swatch, "include is not drawn in the include ring's colour"
     exclude = STYLE_CSS.split('.radius-swatch[data-mode="exclude"] {', 1)[1].split("}", 1)[0]
     assert "var(--warn)" in exclude
+
+
+# ---------- what the map is allowed to draw over ----------
+
+
+def _z_index(selector: str) -> int:
+    """The z-index declared in the first rule for `selector`."""
+    block = STYLE_CSS.split(selector + " {", 1)[1].split("}", 1)[0]
+    for line in block.splitlines():
+        if "z-index:" in line:
+            return int(line.split("z-index:", 1)[1].strip().rstrip(";"))
+    raise AssertionError(f"{selector} declares no z-index")
+
+
+def test_the_map_keeps_its_layering_to_itself():
+    """Leaflet stacks its panes and controls up to 1000, and the
+    overlays drawn over the canvas go to 700. That is the map's internal
+    business, but only if the panel is a stacking context: unpositioned,
+    those numbers compete with the rest of the app, and the airport
+    points drew straight over an open About modal.
+    """
+    panel = STYLE_CSS.split(".map-panel {", 1)[1].split("}", 1)[0]
+    assert "position: relative;" in panel, "the panel is not a stacking context"
+    assert "z-index: 0;" in panel
+
+
+def test_a_modal_outranks_everything_the_app_draws_for_itself():
+    """A dialog something else can cover is not a dialog. The tooltip
+    and the row menu are the two other positioned layers, and nothing
+    inside a modal is a tooltip target, so there is nothing of ours
+    underneath that needed to show through.
+    """
+    modal = _z_index(".modal-backdrop")
+    assert modal > _z_index("#tooltip")
+    assert modal > _z_index(".row-menu")

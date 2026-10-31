@@ -932,6 +932,10 @@ main#app > .workspace,
 .cycle-row .meta { margin-left: auto; font-size: 11.5px; color: var(--ink3); }
 
 /* ---------- modals ---------- */
+/* Above everything the app draws for itself: the tooltip and the row
+   menu both sit at 200, and a dialog that something else can cover is
+   not a dialog. Nothing inside a modal is a tooltip target, so there is
+   nothing of ours left underneath that needed to show through. */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -939,7 +943,7 @@ main#app > .workspace,
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 900;
 }
 .modal-box {
   width: 540px;
@@ -1356,6 +1360,14 @@ main#app > .workspace,
   overflow: hidden;
   border-bottom: 2px solid var(--line);
   background: var(--panel);
+  /* A stacking context of its own. Leaflet layers its panes and
+     controls up to z-index 1000 and the overlays here go to 700, all of
+     which is the map's internal business -- but with the panel itself
+     unpositioned those numbers compete against the rest of the app, and
+     the points drew straight over an open modal. Contained here, they
+     only ever order against each other. */
+  position: relative;
+  z-index: 0;
 }
 
 /* Drawn rather than left to CSS `resize`, whose corner triangle is a
