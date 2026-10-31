@@ -12,6 +12,7 @@ all -- it holds only survivors.
 """
 
 import pytest
+from fastapi.testclient import TestClient
 
 from afp.query import FilterState, RadiusFilter, apply_filters, build_database
 from afp.query.query import (
@@ -23,6 +24,7 @@ from afp.query.query import (
     classify_points,
 )
 from afp.schema import Airport, Frequency, NormalizedData
+from afp.web import create_app
 from afp.web.app import STATIC_DIR
 
 # Los Angeles and a strip beside it, San Francisco ~300nm north, Las
@@ -243,45 +245,68 @@ def test_a_facility_is_never_judged_on_public_private(conn):
     assert result.statuses["VOR1"] != SCOPE
 
 
-# ---------- the docked panel's size limits ----------
+# ---------- the map's own window ----------
 #
-# The map sits above the results table in the same column. The 1180x760
-# window floor was measured with the table only just fitting, so a panel
-# that can grow without limit pushes it off screen -- and nothing about
-# that fails loudly.
+# The map is a separate document in a separate window. The main window
+# is already dense, and a map squeezed above the results table read as
+# one more thing competing for the same column.
 
 MAP_JS = (STATIC_DIR / "map.js").read_text(encoding="utf-8")
 STYLE_CSS = (STATIC_DIR / "style.css").read_text(encoding="utf-8")
+MAP_HTML = (STATIC_DIR / "map.html").read_text(encoding="utf-8")
+INDEX_HTML = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
 
 
-def test_the_panel_is_resizable_by_a_drawn_grip():
-    """Not CSS `resize: vertical`: its corner triangle is a fixed light
-    grey that disappears against the map, and Leaflet's own panes paint
-    over it, so the affordance was there but invisible and unusable.
+@pytest.fixture
+def web_client(tmp_path) -> TestClient:
+    return TestClient(create_app(cache_dir=tmp_path))
+
+
+def test_the_map_page_is_served(web_client):
+    response = web_client.get("/map")
+    assert response.status_code == 200
+    assert "map-window" in response.text
+
+
+def test_the_map_page_loads_the_map_and_nothing_else():
+    """Its own document, so it gets its own scripts -- and the
+    controller after the library it is built on.
     """
-    assert 'className = "map-grip"' in MAP_JS
-    assert ".map-grip {" in STYLE_CSS
-    assert "resize: vertical" not in STYLE_CSS, "the invisible native resizer is back"
+    for src in ("vendor/leaflet/leaflet.js", "map.js", "map-window.js"):
+        assert src in MAP_HTML, f"{src} is not loaded by the map page"
+    assert MAP_HTML.index("map.js") < MAP_HTML.index("map-window.js")
 
 
-def test_the_grip_and_the_stylesheet_cap_the_panel_at_the_same_size():
-    """The resting height is CSS and the drag limit is JS, so the two
-    carry the same numbers in different units and can drift apart
-    silently -- leaving a panel that snaps on first drag.
+def test_the_main_page_no_longer_carries_the_map():
+    """It does not draw one any more, so it should not be paying to
+    parse a mapping library or reserving a panel for it.
     """
-    assert "const MIN_PANEL_PX = 240;" in MAP_JS
-    assert "const MAX_PANEL_SHARE = 0.45;" in MAP_JS
+    assert "map-panel" not in INDEX_HTML, "the docked panel is back"
+    # The tags, not the word: a comment saying why Leaflet is absent is
+    # not Leaflet being present.
+    loads = [
+        line
+        for line in INDEX_HTML.splitlines()
+        if ("<script" in line or "<link" in line) and "leaflet" in line.lower()
+    ]
+    assert not loads, f"the main page still loads Leaflet: {loads}"
+    assert "/static/map.js" not in INDEX_HTML
 
-    panel = STYLE_CSS.split(".map-panel {", 1)[1].split("}", 1)[0]
-    assert "min-height: 240px;" in panel
-    assert "max-height: 45%;" in panel
+
+def test_the_docked_placement_is_gone_from_the_stylesheet():
+    """Dead rules for an element nothing builds any more."""
+    assert ".map-panel" not in STYLE_CSS
+    assert ".map-grip" not in STYLE_CSS
 
 
-def test_leaflet_is_told_when_the_panel_is_resized():
-    """The grip changes the container's height directly. Leaflet caches
-    its size, so without this the new strip stays blank and every click
-    lands on whatever point used to be under it.
+def test_the_map_window_is_sized_by_the_window_not_a_grip():
+    """A panel had to be resizable within a cap, because it shared a
+    column with the results table. A window is resized by the OS, so
+    the grip and its cap went with the panel -- but Leaflet still has
+    to be told, because it caches its container's size.
     """
+    assert "map-grip" not in MAP_JS
+    assert "MAX_PANEL_SHARE" not in MAP_JS
     assert "ResizeObserver" in MAP_JS
     assert "invalidateSize" in MAP_JS
 
@@ -355,18 +380,6 @@ def _z_index(selector: str) -> int:
         if "z-index:" in line:
             return int(line.split("z-index:", 1)[1].strip().rstrip(";"))
     raise AssertionError(f"{selector} declares no z-index")
-
-
-def test_the_map_keeps_its_layering_to_itself():
-    """Leaflet stacks its panes and controls up to 1000, and the
-    overlays drawn over the canvas go to 700. That is the map's internal
-    business, but only if the panel is a stacking context: unpositioned,
-    those numbers compete with the rest of the app, and the airport
-    points drew straight over an open About modal.
-    """
-    panel = STYLE_CSS.split(".map-panel {", 1)[1].split("}", 1)[0]
-    assert "position: relative;" in panel, "the panel is not a stacking context"
-    assert "z-index: 0;" in panel
 
 
 def test_a_modal_outranks_everything_the_app_draws_for_itself():

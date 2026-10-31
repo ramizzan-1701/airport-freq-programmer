@@ -155,7 +155,9 @@ def test_removing_the_active_rule_leaves_nothing_active():
     next render looks for an editor it can never build.
     """
     body = APP_JS.split("function removeRadiusFilter(", 1)[1].split("\n}", 1)[0]
-    assert "if (activeRadiusId === id) activeRadiusId = null;" in body
+    # Through setActiveRadius rather than by assignment: the map window
+    # is showing the same rule, and only hears about this through the server.
+    assert "if (activeRadiusId === id) setActiveRadius(null);" in body
 
 
 def test_a_rule_is_removed_by_id_rather_than_by_position():

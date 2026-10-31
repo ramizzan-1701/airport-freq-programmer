@@ -60,7 +60,7 @@ def test_static_assets_disable_heuristic_caching(empty_client):
     browser after a code update. Every /static/* and / response must
     force revalidation.
     """
-    for path in ("/", "/static/app.js", "/static/style.css"):
+    for path in ("/", "/map", "/static/app.js", "/static/style.css", "/static/map.js"):
         res = empty_client.get(path)
         assert res.headers["cache-control"] == "no-cache", path
 

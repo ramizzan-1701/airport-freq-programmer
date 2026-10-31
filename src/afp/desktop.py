@@ -40,6 +40,13 @@ _STARTUP_TIMEOUT_S = 30.0
 WINDOW_SIZE = (1180, 760)
 WINDOW_MIN_SIZE = (1180, 760)
 
+# The map window. Smaller floor than the main window: it holds a toolbar,
+# a chip row and the map, none of which reflow the way the breakdown band
+# does, so it stays usable far below the main window's size.
+MAP_WINDOW_TITLE = "Radius Map"
+MAP_WINDOW_SIZE = (900, 700)
+MAP_WINDOW_MIN_SIZE = (520, 460)
+
 # pywebview defaults this to False, which silently swallows the download
 # triggered by "Generate XML" -- the button appears to do nothing, and
 # producing that file is the entire point of the app. In a browser tab
@@ -55,6 +62,55 @@ webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
 
 class ServerStartupError(RuntimeError):
     """uvicorn never reached a bound-and-listening state."""
+
+
+class MapWindow:
+    """Opens and closes the radius map's own window.
+
+    Exposed to the page as `pywebview.api`, so the rail's "Open map"
+    button can ask for a real OS window rather than a panel inside the
+    main one.
+
+    Creating a window from a js_api call is the main-thread question
+    flagged at the top of this module: the call arrives on pywebview's
+    JS bridge thread, not thread 0. pywebview marshals create_window
+    onto the GUI thread itself, so this is its problem and not ours --
+    but it is the first place to look if macOS misbehaves.
+    """
+
+    def __init__(self, base_url: str) -> None:
+        self._base_url = base_url
+        self._window = None
+
+    def open_map_window(self) -> bool:
+        # A window the user has closed leaves its Python object behind,
+        # so "is there one" cannot be answered by the reference alone.
+        if self._window is not None and self._window in webview.windows:
+            self._window.show()
+            return True
+        self._window = webview.create_window(
+            MAP_WINDOW_TITLE,
+            f"{self._base_url}/map",
+            width=MAP_WINDOW_SIZE[0],
+            height=MAP_WINDOW_SIZE[1],
+            min_size=MAP_WINDOW_MIN_SIZE,
+        )
+        return True
+
+    def close_map_window(self) -> bool:
+        window, self._window = self._window, None
+        if window is not None and window in webview.windows:
+            window.destroy()
+        return True
+
+    def close_if_open(self) -> None:
+        """Called when the main window goes away.
+
+        pywebview keeps the process alive while any window is open, so a
+        map window left behind would outlive the app it belongs to and
+        hold the server thread open with it.
+        """
+        self.close_map_window()
 
 
 def _wait_for_port(server: uvicorn.Server, timeout_s: float = _STARTUP_TIMEOUT_S) -> int:
@@ -98,13 +154,19 @@ def main() -> int:
         server.should_exit = True
         raise
 
-    webview.create_window(
+    base_url = f"http://127.0.0.1:{port}"
+    map_window = MapWindow(base_url)
+    window = webview.create_window(
         WINDOW_TITLE,
-        f"http://127.0.0.1:{port}",
+        base_url,
         width=WINDOW_SIZE[0],
         height=WINDOW_SIZE[1],
         min_size=WINDOW_MIN_SIZE,
+        js_api=map_window,
     )
+    # Closing the main window closes the app, so the map goes with it.
+    window.events.closing += map_window.close_if_open
+
     webview.start()  # blocks until the user closes the window
 
     server.should_exit = True

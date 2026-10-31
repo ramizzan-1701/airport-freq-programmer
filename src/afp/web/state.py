@@ -6,7 +6,10 @@ session management -- one process, one loaded dataset at a time.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, replace
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, field, replace
 from datetime import date
 from pathlib import Path
 from sqlite3 import Connection
@@ -47,6 +50,37 @@ class LoadedCycle:
     # tick cost about 80ms against a 200ms debounce -- most of the
     # budget, spent re-deriving something that cannot have changed.
     map_point_ids: list[str] | None = None
+
+    # One connection, several request threads. The connection is opened
+    # check_same_thread=False and everything after the build is a SELECT,
+    # which was safe while only one query could be in flight at a time.
+    # It no longer is: the map runs in a second window that queries on
+    # its own, so two requests can enter the database at once. A query
+    # here is a cursor iterated over many calls rather than a single
+    # statement, and two of those interleaving on one connection wedged
+    # both threads -- /api/query and /api/map/status parked inside
+    # sqlite, and every later request behind them, including ones that
+    # touch no data at all.
+    #
+    # Serialising is the whole fix. These queries run in tens of
+    # milliseconds against an in-memory database, so waiting for the
+    # other one costs less than the round trip that asked for it.
+    # Reentrant: an endpoint resolves its filter state against the
+    # database and then runs a query, and the point-order cache fills
+    # itself from inside one. Those nest on one thread, which a plain
+    # Lock would deadlock on.
+    _lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
+
+    @contextmanager
+    def database(self) -> Iterator[Connection]:
+        """The query connection, for one thread at a time.
+
+        Every read of the database goes through here. Reaching for
+        `.conn` directly is what the lock cannot protect against, so
+        nothing outside this module should.
+        """
+        with self._lock:
+            yield self.conn
 
 
 class AppState:

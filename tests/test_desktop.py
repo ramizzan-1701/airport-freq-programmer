@@ -7,6 +7,9 @@ under pytest -- that half is verified by launching the built app.
 
 import threading
 import urllib.request
+from pathlib import Path
+
+import afp.desktop as afp_desktop
 
 import pytest
 import uvicorn
@@ -163,3 +166,103 @@ def test_the_css_floor_sits_under_the_window_minimum():
     # Still close enough to the design width to hold the two-column
     # breakdown -- a floor of, say, 900 would "work" and look broken.
     assert min_w >= 1140
+
+
+# ---------- the map's own window ----------
+
+
+def test_the_page_is_given_a_way_to_open_the_map_window():
+    """The rail's "Open map" button asks the shell for a real OS window.
+    Without js_api the page has no pywebview.api at all, and the button
+    silently falls through to the browser-mode path, which inside a
+    native webview opens nothing.
+    """
+    source = (Path(afp_desktop.__file__)).read_text(encoding="utf-8")
+    assert "js_api=map_window" in source
+    assert "def open_map_window" in source
+
+
+def test_closing_the_main_window_takes_the_map_with_it():
+    """pywebview keeps the process alive while any window is open, so a
+    map window left behind outlives the app it belongs to -- and holds
+    the server thread open with it, since main() only shuts uvicorn down
+    after webview.start() returns.
+    """
+    source = (Path(afp_desktop.__file__)).read_text(encoding="utf-8")
+    assert "window.events.closing += map_window.close_if_open" in source
+
+
+def test_a_second_open_reuses_the_window_rather_than_stacking_them():
+    """"Open map" is not a toggle -- the user can close the window
+    itself, which this side is never told about -- so pressing it again
+    with one already open has to raise that one, not add another.
+    """
+    opened = []
+    shown = []
+
+    class FakeWindow:
+        def show(self):
+            shown.append(self)
+
+        def destroy(self):
+            pass
+
+    fake_windows = []
+
+    def fake_create_window(*args, **kwargs):
+        window = FakeWindow()
+        opened.append(kwargs.get("width"))
+        fake_windows.append(window)
+        return window
+
+    import afp.desktop as desktop
+
+    original_create, original_list = desktop.webview.create_window, desktop.webview.windows
+    desktop.webview.create_window = fake_create_window
+    desktop.webview.windows = fake_windows
+    try:
+        manager = desktop.MapWindow("http://127.0.0.1:1234")
+        manager.open_map_window()
+        manager.open_map_window()
+        assert len(fake_windows) == 1, "a second press opened another window"
+        assert len(shown) == 1, "the existing window was not raised"
+    finally:
+        desktop.webview.create_window = original_create
+        desktop.webview.windows = original_list
+
+
+def test_a_window_the_user_already_closed_is_opened_again():
+    """Closing it leaves the Python object behind, so "is one open"
+    cannot be answered from the reference alone -- only by asking
+    pywebview what it still has.
+    """
+    import afp.desktop as desktop
+
+    class FakeWindow:
+        def show(self):
+            raise AssertionError("showed a window the user had closed")
+
+        def destroy(self):
+            pass
+
+    created = []
+    live = []
+
+    def fake_create_window(*args, **kwargs):
+        window = FakeWindow()
+        created.append(window)
+        live.append(window)
+        return window
+
+    original_create, original_list = desktop.webview.create_window, desktop.webview.windows
+    desktop.webview.create_window = fake_create_window
+    desktop.webview.windows = live
+    try:
+        manager = desktop.MapWindow("http://127.0.0.1:1234")
+        manager.open_map_window()
+        live.clear()  # the user closed it
+        manager.open_map_window()
+        assert len(created) == 2
+    finally:
+        desktop.webview.create_window = original_create
+        desktop.webview.windows = original_list

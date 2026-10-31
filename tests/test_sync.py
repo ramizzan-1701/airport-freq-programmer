@@ -186,3 +186,72 @@ def test_ui_state_merges_rather_than_replacing(client):
     client.put("/api/ui-state", json={})
 
     assert sync(client)["ui"]["active_radius_id"] == "abc123"
+
+
+# ---------- two windows hitting the database at once ----------
+
+
+def test_only_one_thread_is_inside_the_database_at_a_time(tmp_path):
+    """The map runs in a second window that queries on its own, so
+    /api/query and /api/map/status can be in flight at the same moment.
+
+    They share one sqlite connection, opened check_same_thread=False
+    because the handlers run in a threadpool. That was safe while only
+    one query could run at a time. It is not safe for two: a query here
+    is a cursor iterated over many calls, not a single statement, and
+    two of those interleaving on one connection parked both threads
+    inside sqlite -- then every later request behind them, including
+    ones that touch no data at all. The whole server stopped answering.
+
+    Holds the connection briefly so a missing lock shows up as overlap
+    rather than as a race that happens to come out right.
+    """
+    import threading
+    import time
+    from datetime import date
+
+    from afp.query.db import build_database
+    from afp.schema import NormalizedData
+    from afp.web.state import LoadedCycle
+
+    data = NormalizedData(airports=[], frequencies=[], ils=[])
+    loaded = LoadedCycle(cycle_date=date(2026, 9, 3), data=data, conn=build_database(data))
+
+    inside = 0
+    peak = 0
+    guard = threading.Lock()
+    ready = threading.Barrier(4)
+
+    def worker() -> None:
+        nonlocal inside, peak
+        ready.wait(timeout=10)
+        with loaded.database() as conn:
+            with guard:
+                inside += 1
+                peak = max(peak, inside)
+            conn.execute("SELECT 1").fetchone()
+            time.sleep(0.05)
+            with guard:
+                inside -= 1
+
+    threads = [threading.Thread(target=worker) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert not [t for t in threads if t.is_alive()], "a thread never left the database"
+    assert peak == 1, f"{peak} threads were inside the connection at once"
+
+
+def test_every_database_read_goes_through_the_lock():
+    """The lock cannot protect a caller that reaches for `.conn`
+    directly, and a single missed site is enough to bring back the
+    deadlock above -- silently, and only under two windows.
+    """
+    from afp.web.app import STATIC_DIR
+
+    source = (STATIC_DIR.parent / "app.py").read_text(encoding="utf-8")
+    assert "loaded.conn" not in source, (
+        "an endpoint reads the connection directly instead of via loaded.database()"
+    )

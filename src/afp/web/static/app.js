@@ -229,7 +229,9 @@ function debounce(fn, ms) {
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
+    // The id rides along on every write so the map window can tell this
+    // window's changes from its own; see pollForRemoteChanges.
+    headers: { "Content-Type": "application/json", "X-Client-Id": CLIENT_ID },
     ...options,
   });
   return response;
@@ -1291,9 +1293,23 @@ function syncRadiusRow(rule) {
   if (center && document.activeElement !== center) center.value = rule.center;
 }
 
+/** Opens a rule, or closes whatever is open.
+ *
+ * Which rule is open is shared with the map window, so it goes to the
+ * server rather than staying in this one. It is not filter state: it
+ * changes nothing about the query and is never persisted.
+ */
+function setActiveRadius(id) {
+  activeRadiusId = id;
+  api("/api/ui-state", {
+    method: "PUT",
+    body: JSON.stringify({ active_radius_id: id }),
+  }).catch(() => {});
+}
+
 function removeRadiusFilter(id, onChange) {
   selected.radiusFilters = selected.radiusFilters.filter((r) => r.id !== id);
-  if (activeRadiusId === id) activeRadiusId = null;
+  if (activeRadiusId === id) setActiveRadius(null);
   onChange();
   scheduleQuery();
 }
@@ -1330,7 +1346,7 @@ function radiusChip(rf, onChange) {
   item.appendChild(text);
 
   const activate = () => {
-    activeRadiusId = rf.id;
+    setActiveRadius(rf.id);
     onChange();
   };
   item.addEventListener("click", activate);
@@ -1492,7 +1508,7 @@ function radiusEditor(rf, onChange) {
   });
 
   done.addEventListener("click", () => {
-    activeRadiusId = null;
+    setActiveRadius(null);
     onChange();
   });
 
@@ -1514,8 +1530,8 @@ function renderRadiusFilters(container) {
   const mapToggle = document.createElement("button");
   mapToggle.type = "button";
   mapToggle.className = "text-action radius-map-toggle";
-  mapToggle.textContent = mapIsOpen() ? "Hide map" : "Show map";
-  mapToggle.addEventListener("click", () => (mapIsOpen() ? closeRadiusMap() : openRadiusMap()));
+  mapToggle.textContent = "Open map";
+  mapToggle.addEventListener("click", openRadiusMap);
   label.appendChild(mapToggle);
   wrap.appendChild(label);
 
@@ -2056,208 +2072,127 @@ function modalHeader(title, subtitle) {
 }
 
 
-// ---------- the radius map, docked ----------
+// ---------- the radius map, in a window of its own ----------
 //
-// map.js owns everything visual; this owns the state it reads and the
-// calls it makes. The rail and the map edit one list of rules, so the
-// map never keeps its own copy -- it asks through these hooks and is
-// told to redraw.
+// The map is a separate document (/map) in a separate window, so none
+// of its drawing lives here. What is left is opening it, and keeping
+// this window's filters in step with edits made over there.
 
-let radiusMap = null;
-let mapPointsLoaded = null; // the cycle whose points are in hand
-// What the next ring will be, until there is one to edit. Every live
-// edit updates it too, so a new ring starts at the size and mode last
-// dialled in.
-let mapDraft = { radius_nm: 25, mode: "include" };
-// A centre chosen but not yet turned into a ring. Mutually exclusive
-// with activeRadiusId: exactly one selection exists at a time, or the
-// slider has two plausible subjects and silently drives one.
-let stagedCenter = null;
+let mapWindow = null; // the browser-mode popup, when there is one
 
-function mapPanel() {
-  return document.getElementById("map-panel");
+function inDesktopShell() {
+  return !!(window.pywebview && window.pywebview.api && window.pywebview.api.open_map_window);
 }
 
-function mapIsOpen() {
-  return !mapPanel().classList.contains("hidden");
-}
-
-function setStagedCenter(value) {
-  if (value && activeRadiusId) {
-    // Staging closes an open rule. The other half of this rule lives in
-    // setActiveRadius below; both are needed, or the map can show a
-    // blue preview ring and a blue edit handle at once.
-    activeRadiusId = null;
-    renderFilters();
-  }
-  stagedCenter = value;
-  if (radiusMap) radiusMap.redraw();
-}
-
-function setActiveRadius(id) {
-  if (id) stagedCenter = null;
-  activeRadiusId = id;
-  renderFilters();
-  if (radiusMap) radiusMap.redraw();
-}
-
-/** Resolves a centre, returning an error message or null. */
-async function resolveCenterOrMessage(center) {
-  try {
-    const res = await api(`/api/resolve-center?center=${encodeURIComponent(center)}`);
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) return { error: body.detail || "Couldn't find that location." };
-    return { center: body.center || center, lat: body.lat, lon: body.lon };
-  } catch {
-    return { error: "Couldn't check that location." };
-  }
-}
-
-const mapHooks = {
-  activeId: () => activeRadiusId,
-  rules: () => selected.radiusFilters,
-  staged: () => stagedCenter,
-  draftNm: () => mapDraft.radius_nm,
-  draftMode: () => mapDraft.mode,
-  selectedStates: () => selected.states,
-  selectedCities: () => selected.cities,
-
-  setActive: setActiveRadius,
-  setStaged: setStagedCenter,
-  setDraft(patch) {
-    Object.assign(mapDraft, patch);
-  },
-
-  async addRule({ center, radius_nm, mode }) {
-    const resolved = await resolveCenterOrMessage(center);
-    if (resolved.error) return resolved.error;
-    const id = newRadiusId();
-    selected.radiusFilters.push({
-      id,
-      center: resolved.center,
-      radius_nm,
-      mode,
-      lat: resolved.lat,
-      lon: resolved.lon,
-    });
-    stagedCenter = null;
-    activeRadiusId = id;
-    renderFilters();
-    scheduleQuery();
-    return null;
-  },
-
-  async updateRule(id, patch) {
-    const rule = selected.radiusFilters.find((r) => r.id === id);
-    if (!rule) return null;
-    if (patch.center !== undefined) {
-      const resolved = await resolveCenterOrMessage(patch.center);
-      if (resolved.error) return resolved.error;
-      rule.center = resolved.center;
-      rule.lat = resolved.lat;
-      rule.lon = resolved.lon;
-    }
-    if (patch.radius_nm !== undefined) rule.radius_nm = patch.radius_nm;
-    if (patch.mode !== undefined) rule.mode = patch.mode;
-    // Every live edit also moves the defaults, so the next new ring
-    // starts from what was last dialled in.
-    if (patch.radius_nm !== undefined) mapDraft.radius_nm = patch.radius_nm;
-    if (patch.mode !== undefined) mapDraft.mode = patch.mode;
-
-    // A centre can fail to resolve and can change which groups the rail
-    // shows, so that still rebuilds. A radius or a mode changes one row,
-    // and arrives once per slider tick.
-    if (patch.center !== undefined) renderFilters();
-    else syncRadiusRow(rule);
-
-    // The ring follows the slider rather than waiting for the query:
-    // the points cannot recolour until the server answers, but the
-    // circle is ours to draw and a 200ms lag on it reads as a stutter.
-    if (radiusMap) radiusMap.liveRedraw();
-    scheduleQuery();
-    return null;
-  },
-
-  removeRule(id) {
-    removeRadiusFilter(id, () => renderFilters());
-    // The chips and the rings are both built from the rail's list, so
-    // they have to be told it just got shorter.
-    if (radiusMap) radiusMap.liveRedraw();
-  },
-};
-
+/** Opens the map window, or brings back the one already open.
+ *
+ * Deliberately not a toggle. The window has its own close button, and
+ * the user can close it there -- which this side is never told about,
+ * so a toggle would sit on "Close map" pointing at a window that is
+ * already gone. "Open map" is true either way.
+ */
 async function openRadiusMap() {
-  const panel = mapPanel();
-  panel.classList.remove("hidden");
-  renderFilters(); // the rail's Show/Hide action follows the panel
-
-  if (!radiusMap) {
-    radiusMap = window.AfpRadiusMap.create({ host: panel, hooks: mapHooks });
-    radiusMap.elements.closeBtn.addEventListener("click", closeRadiusMap);
-    await radiusMap.loadStates();
-  }
-  // Leaflet measures its container on creation; it was display:none a
-  // moment ago, so without this the map is 0x0 until something else
-  // resizes the window.
-  radiusMap.invalidateSize();
-  await refreshRadiusMap();
-  radiusMap.fitView();
-}
-
-function closeRadiusMap() {
-  mapPanel().classList.add("hidden");
-  renderFilters();
-}
-
-/** Pulls the per-filter statuses and redraws. Called from runQuery, so
- * the map always shows the filter the counter is describing. Opening the
- * map calls it with nothing, which is what the fallback is for: the
- * count on screen is already right, and asking for it again would only
- * risk showing a different one. */
-async function refreshRadiusMap(result = lastQueryResult) {
-  if (!radiusMap || !mapIsOpen()) return;
-  try {
-    const res = await api("/api/map/status", {
-      method: "POST",
-      body: JSON.stringify(buildFilterPayload()),
-    });
-    if (!res.ok) return;
-    const status = await res.json();
-
-    // The points are static for a cycle and large; the status says
-    // which cycle its codes belong to, so that is what decides whether
-    // they need refetching. The two must come from the same cycle or
-    // every colour after the first difference lands on the wrong
-    // airport.
-    if (mapPointsLoaded !== status.cycle_date) {
-      const pointsRes = await api("/api/map/points");
-      if (!pointsRes.ok) return;
-      const payload = await pointsRes.json();
-      radiusMap.setPoints(payload);
-      mapPointsLoaded = payload.cycle_date;
+  if (inDesktopShell()) {
+    try {
+      await window.pywebview.api.open_map_window();
+    } catch {
+      showMessage("Map window", "The map window could not be opened.");
     }
-    radiusMap.setStatus(status);
-  } catch {
-    // A failed refresh leaves the last good picture up rather than
-    // blanking the map; the next filter change tries again.
     return;
   }
-  if (result) {
-    radiusMap.setCounter(
-      `${result.total_count.toLocaleString()} / ${result.cap.toLocaleString()} entries`,
-      result.level === "green" ? "" : result.level
+
+  // Naming the window is what makes a second click raise the first one
+  // rather than open another.
+  mapWindow = window.open("/map", "afp-radius-map", "popup,width=900,height=700");
+  if (!mapWindow) {
+    // Nothing to fall back to: the map has no docked placement any
+    // more, so the only way through is for the user to allow it.
+    showMessage(
+      "Map window",
+      "Your browser blocked the map window. Allow pop-ups for this page and try again."
     );
+    return;
   }
-  radiusMap.redraw();
+  mapWindow.focus();
 }
 
-document.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape" || !radiusMap || !mapIsOpen()) return;
-  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-  if (activeRadiusId) setActiveRadius(null);
-  else if (stagedCenter) setStagedCenter(null);
-});
+// ---------- staying in step with the map window ----------
+//
+// Both windows write filters to the server and poll for what changed.
+// The one rule that keeps them from fighting: a change this window
+// caused comes back on the next poll, and applying it again would
+// re-persist it and bounce it back forever. So every write carries
+// CLIENT_ID and every poll ignores anything stamped with it.
 
+const CLIENT_ID = `main-${Math.random().toString(36).slice(2, 10)}`;
+// Polled whether or not a map window is open. Whether one is cannot be
+// known from here -- a reload of this window loses the handle, and the
+// desktop shell owns its windows -- and a poll that finds nothing is
+// two integers over localhost. Guessing wrong would mean the two
+// windows silently stop talking, which is far worse than the request.
+const SYNC_POLL_MS = 400;
+
+let filtersRevision = -1;
+let uiRevision = -1;
+
+/** Replaces the rail's rules with the map window's, keeping what the
+ * server does not store.
+ *
+ * Only the radius rules are taken. Everything else in the rail is
+ * edited here and nowhere else, and replacing all of `selected` would
+ * close an open accordion group and lose the scroll position for a
+ * change that never touched it.
+ */
+function applyRemoteRadiusFilters(incoming) {
+  const positions = new Map(selected.radiusFilters.map((r) => [r.id, r]));
+  selected.radiusFilters = (incoming || []).map((r) => {
+    const rule = { ...r };
+    if (!rule.id) rule.id = newRadiusId();
+    // lat/lon are this window's cache for drawing; the server neither
+    // stores nor returns them.
+    const had = positions.get(rule.id);
+    if (had && had.center === rule.center) {
+      rule.lat = had.lat;
+      rule.lon = had.lon;
+    }
+    return rule;
+  });
+}
+
+async function pollForRemoteChanges() {
+  try {
+    const res = await fetch(`/api/sync?filters_since=${filtersRevision}&ui_since=${uiRevision}`);
+    if (!res.ok) return;
+    const body = await res.json();
+
+    let changed = false;
+    filtersRevision = body.filters_revision;
+    if (body.filters && body.filters_source !== CLIENT_ID) {
+      applyRemoteRadiusFilters(body.filters.radius_filters);
+      changed = true;
+    }
+
+    uiRevision = body.ui_revision;
+    if (body.ui && body.ui_source !== CLIENT_ID) {
+      const next = body.ui.active_radius_id;
+      if (next !== activeRadiusId) {
+        activeRadiusId = next;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      renderFilters();
+      // Applied, not made here: re-persisting it is what starts the loop.
+      runQuery({ persist: false });
+    }
+  } catch {
+    // The map window or the server went away. Nothing useful to do;
+    // the next tick tries again.
+  }
+}
+
+setInterval(pollForRemoteChanges, SYNC_POLL_MS);
 
 // ---------- memory groups ----------
 //
@@ -2760,12 +2695,20 @@ document.addEventListener("keydown", (e) => {
 
 const scheduleQuery = debounce(runQuery, 200);
 
-async function runQuery() {
+/** Runs the filters and repaints the counter, the table and the button.
+ *
+ * `persist` is what separates a change made here from one applied from
+ * the map window. A remote change has to be re-run -- the counter and
+ * the table are stale until it is -- but writing it back would bump the
+ * revision and bounce it to the other window, which would apply it,
+ * write it back, and so on for as long as both are open.
+ */
+async function runQuery({ persist = true } = {}) {
   const payload = buildFilterPayload();
   // Every filter change funnels through here, so this is the one place
   // that has to remember them -- including "Clear all", which calls
   // runQuery directly rather than through the debounce.
-  persistFilters(payload);
+  if (persist) persistFilters(payload);
   const res = await api("/api/query", { method: "POST", body: JSON.stringify(payload) });
   if (!res.ok) {
     document.getElementById("counter").textContent = "Query failed -- adjust filters and try again.";
@@ -2776,9 +2719,6 @@ async function runQuery() {
   renderCounter(result);
   renderResults(result);
   updateGenerateButton(result);
-  // The map is a picture of this same result, so it refreshes from the
-  // same place rather than listening for filter changes of its own.
-  refreshRadiusMap(result);
 }
 
 // ---------- the live counter, and the dial it spins on ----------

@@ -75,9 +75,15 @@ def _require_loaded(app_state: AppState) -> LoadedCycle:
     return app_state.loaded
 
 
+def _filtered_entries_locked(loaded: LoadedCycle, filter_state, mode, scheme):
+    with loaded.database() as conn:
+        return query_mod.filtered_entries(conn, filter_state, mode=mode, scheme=scheme)
+
+
 def _build_filter_state(body: FilterStateIn, loaded: LoadedCycle):
     try:
-        return body.to_filter_state(loaded.conn)
+        with loaded.database() as conn:
+            return body.to_filter_state(conn)
     except ValueError as exc:
         # e.g. an unresolvable radius-filter center (unknown airport ID)
         raise HTTPException(status_code=400, detail=str(exc)) from None
@@ -96,13 +102,25 @@ def create_app(cache_dir: Path) -> FastAPI:
         # a local dev server, without even revalidating. no-cache forces a
         # conditional GET (cheap 304 when unchanged) instead of a guess.
         response = await call_next(request)
-        if request.url.path == "/" or request.url.path.startswith("/static/"):
+        if request.url.path in ("/", "/map") or request.url.path.startswith("/static/"):
             response.headers["Cache-Control"] = "no-cache"
         return response
 
     @app.get("/")
     def index() -> FileResponse:
         return FileResponse(STATIC_DIR / "index.html")
+
+    @app.get("/map")
+    def map_window() -> FileResponse:
+        """The radius map, as a page of its own.
+
+        It is a window, not a panel: the main window is already dense,
+        and a map squeezed above the results table was reading as one
+        more thing competing for the same column. Served as its own
+        document so the two are separate windows at the OS level --
+        movable, resizable, and on a second screen if there is one.
+        """
+        return FileResponse(STATIC_DIR / "map.html")
 
     @app.get("/api/status", response_model=StatusOut)
     def status() -> StatusOut:
@@ -313,8 +331,10 @@ def create_app(cache_dir: Path) -> FastAPI:
     @app.get("/api/filter-options", response_model=FilterOptionsOut)
     def filter_options() -> FilterOptionsOut:
         loaded = _require_loaded(app.state.afp_state)
-        conn = loaded.conn
+        with loaded.database() as conn:
+            return _filter_options(conn)
 
+    def _filter_options(conn) -> FilterOptionsOut:
         freq_category_codes = [
             code for code in query_mod.list_freq_categories(conn)
             if code not in classification.HIDDEN_FROM_WEB_UI_CATEGORIES
@@ -358,7 +378,8 @@ def create_app(cache_dir: Path) -> FastAPI:
     @app.get("/api/cities")
     def cities(states: list[str] | None = Query(default=None)) -> list[str]:
         loaded = _require_loaded(app.state.afp_state)
-        return query_mod.list_cities(loaded.conn, states=frozenset(states) if states else None)
+        with loaded.database() as conn:
+            return query_mod.list_cities(conn, states=frozenset(states) if states else None)
 
     @app.get("/api/resolve-center", response_model=ResolvedCenterOut)
     def resolve_radius_center(center: str = Query(...)) -> ResolvedCenterOut:
@@ -391,7 +412,8 @@ def create_app(cache_dir: Path) -> FastAPI:
                 ) from None
 
         try:
-            lat, lon = query_mod.resolve_center(loaded.conn, arg)
+            with loaded.database() as conn:
+                lat, lon = query_mod.resolve_center(conn, arg)
         except ValueError:
             raise HTTPException(
                 status_code=404, detail=f"No airport with ID {raw.upper()}."
@@ -403,7 +425,8 @@ def create_app(cache_dir: Path) -> FastAPI:
         app_state: AppState = app.state.afp_state
         loaded = _require_loaded(app_state)
         filter_state = _build_filter_state(body, loaded)
-        filtered_data = query_mod.apply_filters(loaded.conn, filter_state)
+        with loaded.database() as conn:
+            filtered_data = query_mod.apply_filters(conn, filter_state)
         airports_by_id = {a.id: a for a in filtered_data.airports}
         # Standalone facilities (VOR, RCAG, ARTCC, ...) have no Airport
         # record at all -- fall back to a representative Frequency row's
@@ -554,9 +577,7 @@ def create_app(cache_dir: Path) -> FastAPI:
         # Custom entries keep their original group untouched and are never
         # deduplicated against the freshly generated set (spec §5 step 9).
         entries = (
-            query_mod.filtered_entries(
-                loaded.conn, filter_state, mode=body.mode, scheme=state.group_scheme
-            )
+            _filtered_entries_locked(loaded, filter_state, body.mode, state.group_scheme)
             + state.custom_entries
         )
 
@@ -631,7 +652,8 @@ def create_app(cache_dir: Path) -> FastAPI:
     def _map_point_ids(loaded: LoadedCycle) -> list[str]:
         """The point order, cached for the cycle. See LoadedCycle."""
         if loaded.map_point_ids is None:
-            loaded.map_point_ids = [row[0] for row in query_mod.map_points(loaded.conn)]
+            with loaded.database() as conn:
+                loaded.map_point_ids = [row[0] for row in query_mod.map_points(conn)]
         return loaded.map_point_ids
 
     @app.get("/api/map/points", response_model=MapPointsOut)
@@ -639,6 +661,8 @@ def create_app(cache_dir: Path) -> FastAPI:
         """Every drawable point, in a fixed order. Fetched once per
         cycle; the order is what /api/map/status indexes into."""
         loaded = _require_loaded(app.state.afp_state)
+        with loaded.database() as conn:
+            rows = query_mod.map_points(conn)
         return MapPointsOut(
             points=[
                 MapPointOut(
@@ -652,7 +676,7 @@ def create_app(cache_dir: Path) -> FastAPI:
                     kind=row[7],
                     freq_count=row[8],
                 )
-                for row in query_mod.map_points(loaded.conn)
+                for row in rows
             ],
             cycle_date=loaded.cycle_date,
         )
@@ -667,7 +691,8 @@ def create_app(cache_dir: Path) -> FastAPI:
         """
         loaded = _require_loaded(app.state.afp_state)
         filter_state = _build_filter_state(body, loaded)
-        result = query_mod.classify_points(loaded.conn, filter_state)
+        with loaded.database() as conn:
+            result = query_mod.classify_points(conn, filter_state)
 
         # Flattened against the same order /api/map/points returned. A
         # point with no status cannot happen -- classify_points walks

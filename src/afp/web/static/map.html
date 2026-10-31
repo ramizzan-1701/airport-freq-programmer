@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Radius Map</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icon-32.png" />
+  <link rel="icon" type="image/png" sizes="256x256" href="/static/icon-256.png" />
+  <!-- Vendored, not fetched: the app works offline once a cycle is
+       downloaded, and a map that needs a CDN would break that on
+       exactly the connections the rest of it was built to survive. -->
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css" />
+  <!-- The same stylesheet the main window uses, for the tokens and the
+       map's own chrome. The window-filling layout is below. -->
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    /* The map is the whole window here, rather than a panel inside a
+       column, so it takes the viewport and nothing scrolls. */
+    html, body { height: 100%; }
+    body { margin: 0; overflow: hidden; }
+    #map-window {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--panel);
+    }
+  </style>
+</head>
+<body>
+  <div id="map-window"></div>
+
+  <!-- Leaflet before map.js, map.js before the controller: each uses
+       the one above it at load time. -->
+  <script src="/static/vendor/leaflet/leaflet.js"></script>
+  <script src="/static/map.js"></script>
+  <script src="/static/map-window.js"></script>
+</body>
+</html>

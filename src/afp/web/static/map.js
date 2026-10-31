@@ -51,16 +51,6 @@
   // a point drawn inside a ring really is inside it.
   const R_NM = 3440.065;
 
-  // How far the grip may drag the docked panel. The share is of the
-  // results column, so the table keeps the rest: the 1180x760 window
-  // floor was measured with the table only just fitting, and the map
-  // must never be able to push it off screen. Mirrored in style.css,
-  // which sets the resting height.
-  const MIN_PANEL_PX = 240;
-  const MAX_PANEL_SHARE = 0.45;
-
-  const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
-
   /** Ring edges as a geodesic polygon.
    *
    * L.circle is a Mercator approximation: at the latitudes NASR covers
@@ -143,40 +133,6 @@
     canvasHost.className = "map-canvas";
     host.appendChild(canvasHost);
 
-    // Our own grip rather than CSS `resize: vertical`: the browser's
-    // corner triangle is drawn in a fixed light grey that is invisible
-    // against the map, and Leaflet's panes paint over it anyway.
-    const grip = document.createElement("div");
-    grip.className = "map-grip";
-    grip.title = "Drag to resize the map";
-    host.appendChild(grip);
-
-    grip.addEventListener("pointerdown", (event) => {
-      event.preventDefault();
-      grip.setPointerCapture(event.pointerId);
-      grip.classList.add("dragging");
-      const startY = event.clientY;
-      const startHeight = host.getBoundingClientRect().height;
-
-      const onMove = (move) => {
-        // The cap is read live: it is a share of the results column, and
-        // the window can be resized while the grip is held.
-        const column = host.parentElement.getBoundingClientRect().height;
-        const max = Math.max(MIN_PANEL_PX, column * MAX_PANEL_SHARE);
-        const wanted = startHeight + (move.clientY - startY);
-        host.style.height = Math.round(clamp(wanted, MIN_PANEL_PX, max)) + "px";
-      };
-      const onUp = () => {
-        grip.classList.remove("dragging");
-        grip.removeEventListener("pointermove", onMove);
-        grip.removeEventListener("pointerup", onUp);
-        grip.removeEventListener("pointercancel", onUp);
-      };
-      grip.addEventListener("pointermove", onMove);
-      grip.addEventListener("pointerup", onUp);
-      grip.addEventListener("pointercancel", onUp);
-    });
-
     function button(text, tipText) {
       const b = document.createElement("button");
       b.type = "button";
@@ -204,10 +160,9 @@
     });
     map.setView([39.5, -98.35], 4); // CONUS until there is anything better to show
 
-    // The panel is resized with the browser's own `resize: vertical`
-    // grip, which fires no event of its own. Without this the panel
-    // grows but Leaflet keeps its old size: the new strip stays blank,
-    // and every click lands on whatever point used to be under it.
+    // Leaflet caches its container's size. Without this, resizing the
+    // window leaves the new strip blank and every click landing on
+    // whatever point used to be under it.
     if (window.ResizeObserver) {
       let first = true;
       new ResizeObserver(() => {

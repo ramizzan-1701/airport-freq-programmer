@@ -234,5 +234,8 @@ def test_every_filter_change_funnels_through_the_save():
     from afp.web.app import STATIC_DIR
 
     app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
-    run_query = app_js.split("async function runQuery()", 1)[1].split("\n}", 1)[0]
-    assert "persistFilters(payload)" in run_query
+    run_query = app_js.split("async function runQuery(", 1)[1].split("\n}", 1)[0]
+    # Conditional, but opt-out: a change applied from the map window has
+    # already been written, and writing it again would bounce it back.
+    assert "{ persist = true } = {}" in run_query, "the save is no longer opt-out"
+    assert "if (persist) persistFilters(payload);" in run_query
