@@ -53,6 +53,11 @@ This is what the prototype does. Match it unless a decision in §8 says otherwis
   toolbar, and clicks on the map all read and write it.
 - At most **one rule is active** (being edited) at a time. The active rule is shared UI state:
   activating it from the map expands it in the rail, and the reverse.
+- **The active rule and a staged centre are mutually exclusive** -- there is exactly one
+  selection on screen, never two. Staging a centre closes any open rule; opening a rule (from
+  the map, from a map chip, or from a rail chip) clears any staged centre. Both halves are
+  needed: with either missing, the map can show a blue preview ring and a blue edit handle at
+  the same time, and the slider silently drives only one of them.
 - Each rule gets a **stable client id** so "active" survives reordering and removal (see §4.4).
 
 ### 3.2 Rail (main window)
@@ -108,7 +113,8 @@ This is what the prototype does. Match it unless a decision in §8 says otherwis
 3. A click on **open map with a rule active** deactivates it.
 4. A click on **open map with nothing active** stages a pin centre
    (`lat.toFixed(4),lon.toFixed(4)`) the same way, again without creating anything.
-5. **Esc** deactivates, or clears a staged centre, and blurs any focused input.
+5. **Esc** deactivates, or clears a staged centre, and blurs any focused input. (It never has
+   both to clear -- see §3.1.)
 
 Creating on click was the original design (see §8). It was changed after trying it: both forms
 already ask for a centre and then an Add, so creating on the click alone was the odd one out,
