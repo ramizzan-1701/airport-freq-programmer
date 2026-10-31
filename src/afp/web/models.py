@@ -69,6 +69,15 @@ class MapStatusOut(BaseModel):
     # Standalone facilities with no position. Counted rather than drawn,
     # so the legend can account for them instead of losing them.
     unplottable: int
+    # How many of each point's frequencies survive the frequency-level
+    # filters, in the same order. A plain array of small integers: the
+    # alternative, sending only the points whose count differs from the
+    # static one, is larger in the case that actually happens, because
+    # the default view already has a category filter on and most points
+    # differ under it.
+    #
+    # Read only on hover, so it never gates a redraw.
+    freq_matches: list[int]
     rings: list[MapRingOut]
     cycle_date: date
 

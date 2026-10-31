@@ -391,3 +391,61 @@ def test_a_modal_outranks_everything_the_app_draws_for_itself():
     modal = _z_index(".modal-backdrop")
     assert modal > _z_index("#tooltip")
     assert modal > _z_index(".row-menu")
+
+
+# ---------- what the map says about filters it cannot draw ----------
+
+
+def test_the_map_names_the_city_filter_and_the_use_scope():
+    """Two filters change what is on the map without colouring anything.
+    Cities tint a halo small enough to miss; the use scope removes points
+    outright -- on a default nationwide map that is roughly 14,000
+    airports simply not there, with nothing on screen to say why.
+    """
+    assert "renderBadges" in MAP_JS
+    assert "City:" in MAP_JS
+    assert "Public only" in MAP_JS and "Private only" in MAP_JS
+
+
+def test_the_map_does_not_badge_the_frequency_categories():
+    """Decided rather than forgotten. A badge names a filter and points
+    at a mark; the category filter changes no dot on the map, so the
+    badge would point at nothing. The hover carries that instead.
+    """
+    assert "categories" not in MAP_JS.split("function renderBadges")[1].split("function renderHint")[0]
+
+
+def test_neither_use_flag_ticked_earns_no_badge():
+    """Both off means no constraint, not an empty map -- the same
+    reading airport_use_scope gives it. A badge there would announce a
+    filter that is not filtering.
+    """
+    badges = MAP_JS.split("function renderBadges")[1].split("function renderHint")[0]
+    assert "pub && !priv" in badges and "priv && !pub" in badges
+
+
+def test_the_badges_clear_leaflet_s_zoom_control():
+    """They sit top-left, which Leaflet already owns. Overlapping would
+    put an unclickable label over the one control the map cannot do
+    without.
+    """
+    block = STYLE_CSS.split(".map-badges")[1].split("}")[0]
+    assert "left: 52px" in block, "the badges would sit under the zoom control"
+
+
+def test_the_hover_says_when_a_point_contributes_nothing():
+    """A dot's colour says where the point is. Nothing on the map says
+    whether it is worth anything, and under a narrow category filter
+    most selected dots are not.
+    """
+    assert "pass the frequency filters" in MAP_JS
+    assert "None pass the frequency filters" in MAP_JS
+
+
+def test_the_hover_does_not_call_them_your_filters():
+    """With nothing selected in the rail the app still drops
+    AIRSPACE_INFO, EMERGENCY and NDB, so a count can sit below the total
+    without the user having filtered anything. The number is honest; the
+    attribution would not be.
+    """
+    assert "pass your frequency filters" not in MAP_JS

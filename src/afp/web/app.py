@@ -715,6 +715,7 @@ def create_app(cache_dir: Path) -> FastAPI:
         return MapStatusOut(
             statuses=codes,
             unplottable=result.unplottable,
+            freq_matches=[result.matching_frequencies.get(pid, 0) for pid in _map_point_ids(loaded)],
             rings=rings,
             cycle_date=loaded.cycle_date,
         )

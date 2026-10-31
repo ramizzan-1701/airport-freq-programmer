@@ -253,6 +253,14 @@
     draftMode: () => draft.mode,
     selectedStates: () => new Set(filters && filters.states ? filters.states : []),
     selectedCities: () => new Set(filters && filters.cities ? filters.cities : []),
+    // The server's defaults, spelled out: a filter state that has never
+    // been saved arrives without these keys, and undefined would read
+    // as "private only" rather than as the public-use-only scope the
+    // app has always started in.
+    useScope: () => ({
+      public: !filters || filters.include_public !== false,
+      private: !!(filters && filters.include_private),
+    }),
 
     setActive,
     setStaged,

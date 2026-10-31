@@ -1473,6 +1473,37 @@ main#app > .workspace,
   pointer-events: none;
 }
 .map-tip .muted { color: var(--ink3); }
+/* The one line in the tooltip that is a warning rather than a
+   fact: this point is inside your rings and still gives you
+   nothing. Muted would bury the only reason it is written. */
+.map-tip .map-tip-none { color: var(--warn); }
+
+/* Top-left, but clear of Leaflet's zoom control, which owns the corner
+   itself. Capped so a long city list wraps downward past the control
+   rather than running under the hint on the other side. */
+.map-badges {
+  position: absolute;
+  top: 8px;
+  left: 52px;
+  z-index: 600;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: calc(100% - 328px);
+  min-width: 110px;
+}
+.map-badge {
+  font-size: 10.5px;
+  letter-spacing: .04em;
+  color: var(--ink2);
+  background: rgba(17, 21, 26, .92);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 2px 7px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .map-hint {
   position: absolute;

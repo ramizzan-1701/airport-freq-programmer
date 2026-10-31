@@ -408,6 +408,20 @@ class MapStatus:
     # them (some TRACON/APCH_DEP rows report a frequency and no lat/lon).
     # They cannot be drawn, so they are counted instead of vanishing.
     unplottable: int
+    # id -> how many of that point's frequencies survive the
+    # frequency-level filters: category, weather subtype, site type,
+    # facility status, approach call, 24-hour tower, plus its ILS
+    # records when the ILS pseudo-category is on. Ids with none are
+    # absent rather than zero.
+    #
+    # This is not part of the status, and deliberately so. A status is
+    # about where a point is; this is about whether it has anything to
+    # give once it is there, which are different questions with
+    # different answers -- an airport can sit squarely inside a ring and
+    # contribute nothing because none of its frequencies are in the
+    # categories you asked for. The map still draws it as selected,
+    # because it is; the hover is where the difference is told.
+    matching_frequencies: dict[str, int]
 
 
 def _status_from_flags(in_scope: int, passes_sc: int, in_include: int, outside_excludes: int) -> str:
@@ -420,6 +434,57 @@ def _status_from_flags(in_scope: int, passes_sc: int, in_include: int, outside_e
     if not outside_excludes:
         return EXCLUDED
     return SELECTED
+
+
+def _matching_frequency_counts(conn: sqlite3.Connection, filters: FilterState) -> dict[str, int]:
+    """How many frequencies each point still has once the frequency-level
+    filters are applied.
+
+    Counted here, not folded into the status, because the status answers
+    "where is this point" and this answers "is it worth anything". The
+    map draws the first; the hover tells you the second.
+
+    Deliberately the frequency-level filters only -- no state, city,
+    radius or use scope. Those are already in the status, and counting
+    them twice would make a point that fails them read as a point whose
+    frequencies were all filtered away, which is a different sentence.
+
+    Two queries rather than one per point: a GROUP BY over the whole
+    table costs about what one correlated subquery would, and this runs
+    on every status refresh.
+
+    Note that this can come out below the point's total even when the
+    user has filtered nothing. FilterStateIn fills excluded_freq_categories
+    with HIDDEN_FROM_WEB_UI_CATEGORIES whenever no categories are chosen,
+    so AIRSPACE_INFO, EMERGENCY and NDB are always dropped. That is the
+    honest number -- those never reach the export either -- but it is why
+    the hover says "the frequency filters" and not "your".
+    """
+    freq_where, freq_params = _frequency_where(filters)
+    counts: dict[str, int] = dict(
+        conn.execute(
+            f"SELECT airport_id, COUNT(*) FROM frequencies WHERE {freq_where} GROUP BY airport_id",
+            freq_params,
+        ).fetchall()
+    )
+
+    # ILS lives in its own table and is kept or dropped as a whole by
+    # the pseudo-category, so it is counted separately or not at all.
+    # Leaving it out would report "none pass your filters" for every
+    # airport under an ILS-only selection -- the one case where the
+    # count matters most, and the one it would get exactly backwards.
+    if filters.should_include_ils:
+        ils_where, ils_params = _ils_where(filters)
+        airport_clause, airport_params = _ils_airport_clause(filters)
+        rows = conn.execute(
+            f"SELECT airport_id, COUNT(*) FROM ils "
+            f"WHERE {ils_where} AND {airport_clause} GROUP BY airport_id",
+            ils_params + airport_params,
+        ).fetchall()
+        for point_id, n in rows:
+            counts[point_id] = counts.get(point_id, 0) + n
+
+    return counts
 
 
 def classify_points(conn: sqlite3.Connection, filters: FilterState) -> MapStatus:
@@ -538,7 +603,9 @@ def classify_points(conn: sqlite3.Connection, filters: FilterState) -> MapStatus
     for point_id, passes_sc, in_include, outside_excludes in facility_rows:
         statuses[point_id] = _status_from_flags(1, passes_sc, in_include, outside_excludes)
 
-    return MapStatus(statuses=statuses, unplottable=unplottable)
+    matching = _matching_frequency_counts(conn, filters)
+
+    return MapStatus(statuses=statuses, unplottable=unplottable, matching_frequencies=matching)
 
 
 
@@ -562,7 +629,12 @@ def map_points(conn: sqlite3.Connection) -> list[tuple]:
     rows = conn.execute(
         """
         SELECT a.id, a.name, a.city, a.state, a.lat, a.lon, a.public_use, 'airport',
+               -- ILS counts here because MapStatus.matching_frequencies
+               -- counts it too, and the hover shows the two side by
+               -- side. Different universes would read as nonsense:
+               -- "2 freq, 3 pass your filters".
                (SELECT COUNT(*) FROM frequencies f WHERE f.airport_id = a.id)
+               + (SELECT COUNT(*) FROM ils i WHERE i.airport_id = a.id)
           FROM airports a
          ORDER BY a.id
         """

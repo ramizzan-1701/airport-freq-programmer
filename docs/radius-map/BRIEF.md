@@ -132,6 +132,19 @@ Leaflet already suppresses the click after a drag, so panning never creates ring
 - **On an airport:**
   - ID and name.
   - City, state · public/private · frequency count.
+  - How many of those frequencies survive the frequency-level filters, when that is
+    fewer than all of them: `3 pass the frequency filters`, or `None pass the frequency
+    filters` in `--warn`.
+
+    This is the one place the map admits what a dot cannot say. Categories filter
+    *frequencies*; the status is computed from airports, so it never sees them. On real
+    data a 60nm ring around SJC holds 42 selected airports whatever the categories say —
+    and under Tower-only, 28 of those 42 contribute nothing while being drawn exactly
+    like the 14 that carry the result.
+
+    "the" filters, not "your": with nothing chosen in the rail the app still drops
+    `HIDDEN_FROM_WEB_UI_CATEGORIES`, so a count can sit below the total without the user
+    having filtered anything.
   - Its status text (§3.6).
   - Its distance to each rule centre (`+ WVI: 12 nm`, `− SJC: 4 nm`).
   - `Click to add a ring here`.
@@ -169,8 +182,18 @@ Count the ones without a position as "not on map" in the legend; don't drop them
   (`PIN 25nm` for lat,lon centres). The active rule's label gets the `--acc` treatment.
 - **State filter:** the selected states are outlined in `--acc` with a slightly lifted fill;
   unselected states are dimmed when any state is selected.
-- **Badges (top-left):** `State: CA, NV`, `City: SAN JOSE …`, the use scope, and
-  `{n} categories` when a category filter is set.
+- **Badges (top-left, clear of Leaflet's zoom control):** `City: SAN JOSE, SANTA CLARA
+  +2` and the use scope (`Public only` / `Private only`). Both off is no constraint and
+  earns no badge; both on constrains nothing and earns none either.
+
+  Narrowed from the original list. **No state badge:** the selected states are already
+  drawn, outlined in `--acc`, so it would name a filter that is already visible. **No
+  category badge:** a badge names a filter and points at a mark, and the category filter
+  changes no dot on the map at all — `{n} categories` would point at nothing and say
+  nothing actionable. The hover carries that instead (§3.5). The two that remain are
+  there because cities tint a halo small enough to miss, and the use scope removes points
+  outright — on a default nationwide map that is about 14,000 airports simply absent,
+  with nothing on screen to explain it.
 - **Hint (top-right):** `Click an airport to choose it as a center, or a ring's center to edit
   it`; with a centre staged, `{ID} chosen - press Add ring, or Add in the rail`; with a rule
   active, `Slider resizes this ring. Click open map or press Esc when done.`

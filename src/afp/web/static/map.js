@@ -98,6 +98,10 @@
 
     let points = null; // static for a cycle: {id,name,city,state,lat,lon,...}
     let statuses = ""; // one code per point, in points order
+    // How many of each point's frequencies survive the frequency-level
+    // filters, in points order. Read on hover only -- a dot's colour is
+    // about where it is, this is about whether it has anything to give.
+    let freqMatches = null;
     let unplottable = 0;
     let rings = []; // resolved rules from the server
     let drawn = []; // [point, x, y] for everything on screen, for hit-testing
@@ -394,11 +398,11 @@
         const p = points[i];
         const pt = map.latLngToContainerPoint([p.lat, p.lon]);
         if (pt.x < -20 || pt.y < -20 || pt.x > size.x + 20 || pt.y > size.y + 20) continue;
-        buckets[code].push([p, pt]);
+        buckets[code].push([p, pt, freqMatches ? freqMatches[i] : null]);
       }
 
       for (const code of order) {
-        for (const [p, pt] of buckets[code]) {
+        for (const [p, pt, matches] of buckets[code]) {
           const r = rad[code];
           ctx.beginPath();
           ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
@@ -435,7 +439,7 @@
             ctx.lineWidth = 1.4;
             ctx.stroke();
           }
-          drawn.push([p, pt.x, pt.y, code]);
+          drawn.push([p, pt.x, pt.y, code, matches]);
         }
       }
 
@@ -797,7 +801,11 @@
       }
     }
 
-    // ---------- hint and legend ----------
+    // ---------- badges, hint and legend ----------
+
+    const badges = document.createElement("div");
+    badges.className = "map-badges";
+    map.getContainer().appendChild(badges);
 
     const hint = document.createElement("div");
     hint.className = "map-hint";
@@ -806,6 +814,48 @@
     const legend = document.createElement("div");
     legend.className = "map-legend";
     map.getContainer().appendChild(legend);
+
+    /** The filters that change what is on the map without colouring
+     * anything, named so their effect is not a mystery.
+     *
+     * Only two qualify. The selected states are already drawn -- their
+     * outlines are lifted in --acc -- and the frequency categories
+     * change no dot on the map at all, which is why there is no badge
+     * for them: it would name a filter and point at nothing. These two
+     * are different. Cities tint a halo so small it is easy to miss,
+     * and the use scope removes points outright: on a default nationwide
+     * map that is about 14,000 airports simply not there, with nothing
+     * on screen to say so.
+     */
+    function renderBadges() {
+      const parts = [];
+
+      const cities = [...hooks.selectedCities()];
+      if (cities.length) {
+        cities.sort();
+        parts.push(
+          cities.length > 2
+            ? `City: ${cities.slice(0, 2).join(", ")} +${cities.length - 2}`
+            : `City: ${cities.join(", ")}`
+        );
+      }
+
+      // Neither ticked is no constraint, not an empty map -- the same
+      // reading airport_use_scope gives it -- so it earns no badge
+      // either. Both ticked constrains nothing, so nor does that.
+      const { public: pub, private: priv } = hooks.useScope();
+      if (pub && !priv) parts.push("Public only");
+      else if (priv && !pub) parts.push("Private only");
+
+      badges.innerHTML = "";
+      badges.hidden = !parts.length;
+      for (const text of parts) {
+        const badge = document.createElement("span");
+        badge.className = "map-badge";
+        badge.textContent = text;
+        badges.appendChild(badge);
+      }
+    }
 
     function renderHint() {
       const active = activeRule();
@@ -871,8 +921,28 @@
             : "Click to edit this ring") +
           "</span>";
       } else {
-        const [p, , , code] = hit;
+        const [p, , , code, matches] = hit;
         const use = p.public_use === null ? "facility" : p.public_use ? "public" : "private";
+        // The dot says this point is inside the rings. It does not say
+        // the point gives you anything: category, site type and the
+        // rest filter frequencies, and the status never saw them. An
+        // airport can sit squarely in a ring and contribute nothing.
+        //
+        // Only shown when it differs from the total, because "12 of 12"
+        // is the same sentence as "12 freq" with more words in it.
+        //
+        // "the" filters rather than "your": with nothing selected in
+        // the rail the app still drops AIRSPACE_INFO, EMERGENCY and NDB
+        // (HIDDEN_FROM_WEB_UI_CATEGORIES), so a count can differ from
+        // the total without the user having filtered anything. The
+        // number is still the true one -- those frequencies never reach
+        // the export -- but it is not theirs to explain.
+        const kept =
+          matches == null || matches === p.freq_count
+            ? ""
+            : matches === 0
+              ? '<br><span class="map-tip-none">None pass the frequency filters</span>'
+              : `<br><span class="muted">${matches} pass the frequency filters</span>`;
         const distances = liveRings()
           .map(
             (r) =>
@@ -884,8 +954,9 @@
         tip.innerHTML =
           `<b>${escapeHtml(p.id)}</b> ${escapeHtml(p.name)}<br>` +
           `<span class="muted">${escapeHtml(p.city)}${p.state ? ", " + escapeHtml(p.state) : ""}` +
-          ` · ${use} · ${p.freq_count} freq</span><br>` +
-          `<span class="muted">${STATUS_TEXT[code] || ""}</span>` +
+          ` · ${use} · ${p.freq_count} freq</span>` +
+          kept +
+          `<br><span class="muted">${STATUS_TEXT[code] || ""}</span>` +
           (distances ? `<br>${distances}` : "") +
           '<br><span class="muted">Click to choose this as a ring center</span>';
       }
@@ -970,6 +1041,7 @@
     function redraw() {
       syncToolbar();
       renderChips();
+      renderBadges();
       renderHint();
       renderLegend();
       styleStates();
@@ -1022,6 +1094,7 @@
       setStatus(payload) {
         statuses = payload.statuses;
         unplottable = payload.unplottable;
+        freqMatches = payload.freq_matches || null;
         rings = payload.rings;
       },
       get points() {
