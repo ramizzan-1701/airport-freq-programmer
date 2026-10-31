@@ -9,6 +9,10 @@
        doesn't upscale the 32. -->
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icon-32.png" />
   <link rel="icon" type="image/png" sizes="256x256" href="/static/icon-256.png" />
+  <!-- Vendored, not fetched: the app works offline once a cycle is
+       downloaded, and a map that needs a CDN would break that on
+       exactly the connections the rest of it was built to survive. -->
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
@@ -70,6 +74,12 @@
              controls, which is the clearest place to associate the two. -->
         <div id="groups-bar" class="groups-bar"></div>
 
+        <!-- The docked map. Resizable, capped, and collapsed by
+             default: the 1180x760 window floor was measured with the
+             results table only just fitting, so this must never be able
+             to push it off screen. -->
+        <div id="map-panel" class="map-panel hidden"></div>
+
         <div id="generate-errors" class="generate-errors hidden"></div>
 
         <div id="results-note"></div>
@@ -115,6 +125,10 @@
     <div class="modal-box"></div>
   </div>
 
+  <!-- Leaflet before map.js, map.js before app.js: each uses the one
+       above it at load time. -->
+  <script src="/static/vendor/leaflet/leaflet.js"></script>
+  <script src="/static/map.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

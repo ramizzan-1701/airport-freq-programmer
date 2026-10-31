@@ -252,3 +252,43 @@ def test_the_mac_build_ships_the_whole_static_directory():
     assert 'Path("src/afp/web/static").iterdir()' in setup_py, (
         "py2app is back to listing individual static files"
     )
+
+
+def test_the_vendored_map_assets_are_packaged():
+    """static/* does not match nested directories. The fonts needed
+    their own line for exactly this reason, and a missing one here does
+    not fail the build -- the map just never draws in the packaged app
+    while working perfectly from a checkout.
+    """
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    package_data = pyproject.split("[tool.setuptools.package-data]", 1)[1].split("[tool.", 1)[0]
+
+    vendor = REPO_ROOT / "src" / "afp" / "web" / "static" / "vendor"
+    directories = {p.parent.relative_to(vendor.parent.parent).as_posix() for p in vendor.rglob("*") if p.is_file()}
+    for directory in directories:
+        assert f'"{directory}/*"' in package_data, f"{directory} is not in package-data"
+
+
+def test_the_map_libraries_are_vendored_rather_than_fetched():
+    """The app works offline once a cycle is downloaded. A map that
+    needs a CDN to draw would break that on exactly the connections the
+    rest of the app was built to survive.
+    """
+    vendor = REPO_ROOT / "src" / "afp" / "web" / "static" / "vendor"
+    assert (vendor / "leaflet" / "leaflet.js").exists()
+    assert (vendor / "leaflet" / "leaflet.css").exists()
+    assert (vendor / "us-states.json").exists()
+
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    for tag in ("<script", "<link"):
+        for line in html.splitlines():
+            if tag in line and "http" in line and "fonts.googleapis" not in line:
+                raise AssertionError(f"the page fetches from the network: {line.strip()}")
+
+
+def test_the_vendored_code_keeps_its_licence():
+    """Redistributed in a public repo and inside both desktop bundles."""
+    vendor = REPO_ROOT / "src" / "afp" / "web" / "static" / "vendor"
+    assert (vendor / "leaflet" / "LICENSE").exists()
+    readme = (vendor / "README.md").read_text(encoding="utf-8")
+    assert "BSD-2-Clause" in readme and "ISC" in readme

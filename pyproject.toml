@@ -42,10 +42,16 @@ where = ["src"]
 # raises at import time ("Directory ... does not exist"). Editable
 # installs mask the problem by pointing back at the source tree.
 [tool.setuptools.package-data]
-# static/* alone does not match nested directories, so the self-hosted
-# fonts need their own line -- without it the packaged UI silently falls
-# back to system fonts.
-"afp.web" = ["static/*", "static/fonts/*"]
+# static/* alone does not match nested directories, so every nested
+# folder needs its own line -- without it the packaged UI silently falls
+# back to system fonts, or, for the map, silently fails to draw.
+"afp.web" = [
+    "static/*",
+    "static/fonts/*",
+    "static/vendor/*",
+    "static/vendor/leaflet/*",
+    "static/vendor/leaflet/images/*",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

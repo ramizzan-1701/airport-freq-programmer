@@ -23,6 +23,7 @@ from afp.query.query import (
     classify_points,
 )
 from afp.schema import Airport, Frequency, NormalizedData
+from afp.web.app import STATIC_DIR
 
 # Los Angeles and a strip beside it, San Francisco ~300nm north, Las
 # Vegas ~200nm east in another state, and a private field next to LA.
@@ -240,3 +241,46 @@ def test_a_facility_is_never_judged_on_public_private(conn):
     """
     result = classify_points(conn, FilterState(include_public=False, include_private=True))
     assert result.statuses["VOR1"] != SCOPE
+
+
+# ---------- the docked panel's size limits ----------
+#
+# The map sits above the results table in the same column. The 1180x760
+# window floor was measured with the table only just fitting, so a panel
+# that can grow without limit pushes it off screen -- and nothing about
+# that fails loudly.
+
+MAP_JS = (STATIC_DIR / "map.js").read_text(encoding="utf-8")
+STYLE_CSS = (STATIC_DIR / "style.css").read_text(encoding="utf-8")
+
+
+def test_the_panel_is_resizable_by_a_drawn_grip():
+    """Not CSS `resize: vertical`: its corner triangle is a fixed light
+    grey that disappears against the map, and Leaflet's own panes paint
+    over it, so the affordance was there but invisible and unusable.
+    """
+    assert 'className = "map-grip"' in MAP_JS
+    assert ".map-grip {" in STYLE_CSS
+    assert "resize: vertical" not in STYLE_CSS, "the invisible native resizer is back"
+
+
+def test_the_grip_and_the_stylesheet_cap_the_panel_at_the_same_size():
+    """The resting height is CSS and the drag limit is JS, so the two
+    carry the same numbers in different units and can drift apart
+    silently -- leaving a panel that snaps on first drag.
+    """
+    assert "const MIN_PANEL_PX = 240;" in MAP_JS
+    assert "const MAX_PANEL_SHARE = 0.45;" in MAP_JS
+
+    panel = STYLE_CSS.split(".map-panel {", 1)[1].split("}", 1)[0]
+    assert "min-height: 240px;" in panel
+    assert "max-height: 45%;" in panel
+
+
+def test_leaflet_is_told_when_the_panel_is_resized():
+    """The grip changes the container's height directly. Leaflet caches
+    its size, so without this the new strip stays blank and every click
+    lands on whatever point used to be under it.
+    """
+    assert "ResizeObserver" in MAP_JS
+    assert "invalidateSize" in MAP_JS

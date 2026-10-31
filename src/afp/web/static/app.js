@@ -1457,6 +1457,14 @@ function renderRadiusFilters(container) {
   const label = document.createElement("div");
   label.className = "filter-group-title";
   label.textContent = "Geographic Radius";
+  // The map is another way to edit these same rules, so it is offered
+  // where they are, not from the topbar.
+  const mapToggle = document.createElement("button");
+  mapToggle.type = "button";
+  mapToggle.className = "text-action radius-map-toggle";
+  mapToggle.textContent = mapIsOpen() ? "Hide map" : "Show map";
+  mapToggle.addEventListener("click", () => (mapIsOpen() ? closeRadiusMap() : openRadiusMap()));
+  label.appendChild(mapToggle);
   wrap.appendChild(label);
 
   const list = document.createElement("div");
@@ -1996,6 +2004,195 @@ function modalHeader(title, subtitle) {
 }
 
 
+// ---------- the radius map, docked ----------
+//
+// map.js owns everything visual; this owns the state it reads and the
+// calls it makes. The rail and the map edit one list of rules, so the
+// map never keeps its own copy -- it asks through these hooks and is
+// told to redraw.
+
+let radiusMap = null;
+let mapPointsLoaded = null; // the cycle whose points are in hand
+// What the next ring will be, until there is one to edit. Every live
+// edit updates it too, so a new ring starts at the size and mode last
+// dialled in.
+let mapDraft = { radius_nm: 25, mode: "include" };
+// A centre chosen but not yet turned into a ring. Mutually exclusive
+// with activeRadiusId: exactly one selection exists at a time, or the
+// slider has two plausible subjects and silently drives one.
+let stagedCenter = null;
+
+function mapPanel() {
+  return document.getElementById("map-panel");
+}
+
+function mapIsOpen() {
+  return !mapPanel().classList.contains("hidden");
+}
+
+function setStagedCenter(value) {
+  if (value && activeRadiusId) {
+    // Staging closes an open rule. The other half of this rule lives in
+    // setActiveRadius below; both are needed, or the map can show a
+    // blue preview ring and a blue edit handle at once.
+    activeRadiusId = null;
+    renderFilters();
+  }
+  stagedCenter = value;
+  if (radiusMap) radiusMap.redraw();
+}
+
+function setActiveRadius(id) {
+  if (id) stagedCenter = null;
+  activeRadiusId = id;
+  renderFilters();
+  if (radiusMap) radiusMap.redraw();
+}
+
+/** Resolves a centre, returning an error message or null. */
+async function resolveCenterOrMessage(center) {
+  try {
+    const res = await api(`/api/resolve-center?center=${encodeURIComponent(center)}`);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return { error: body.detail || "Couldn't find that location." };
+    return { center: body.center || center, lat: body.lat, lon: body.lon };
+  } catch {
+    return { error: "Couldn't check that location." };
+  }
+}
+
+const mapHooks = {
+  activeId: () => activeRadiusId,
+  staged: () => stagedCenter,
+  draftNm: () => mapDraft.radius_nm,
+  draftMode: () => mapDraft.mode,
+  selectedStates: () => selected.states,
+  selectedCities: () => selected.cities,
+
+  setActive: setActiveRadius,
+  setStaged: setStagedCenter,
+  setDraft(patch) {
+    Object.assign(mapDraft, patch);
+  },
+
+  async addRule({ center, radius_nm, mode }) {
+    const resolved = await resolveCenterOrMessage(center);
+    if (resolved.error) return resolved.error;
+    const id = newRadiusId();
+    selected.radiusFilters.push({
+      id,
+      center: resolved.center,
+      radius_nm,
+      mode,
+      lat: resolved.lat,
+      lon: resolved.lon,
+    });
+    stagedCenter = null;
+    activeRadiusId = id;
+    renderFilters();
+    scheduleQuery();
+    return null;
+  },
+
+  async updateRule(id, patch) {
+    const rule = selected.radiusFilters.find((r) => r.id === id);
+    if (!rule) return null;
+    if (patch.center !== undefined) {
+      const resolved = await resolveCenterOrMessage(patch.center);
+      if (resolved.error) return resolved.error;
+      rule.center = resolved.center;
+      rule.lat = resolved.lat;
+      rule.lon = resolved.lon;
+    }
+    if (patch.radius_nm !== undefined) rule.radius_nm = patch.radius_nm;
+    if (patch.mode !== undefined) rule.mode = patch.mode;
+    // Every live edit also moves the defaults, so the next new ring
+    // starts from what was last dialled in.
+    if (patch.radius_nm !== undefined) mapDraft.radius_nm = patch.radius_nm;
+    if (patch.mode !== undefined) mapDraft.mode = patch.mode;
+    renderFilters();
+    scheduleQuery();
+    return null;
+  },
+
+  removeRule(id) {
+    removeRadiusFilter(id, () => renderFilters());
+  },
+};
+
+async function openRadiusMap() {
+  const panel = mapPanel();
+  panel.classList.remove("hidden");
+  renderFilters(); // the rail's Show/Hide action follows the panel
+
+  if (!radiusMap) {
+    radiusMap = window.AfpRadiusMap.create({ host: panel, hooks: mapHooks });
+    radiusMap.elements.closeBtn.addEventListener("click", closeRadiusMap);
+    await radiusMap.loadStates();
+  }
+  // Leaflet measures its container on creation; it was display:none a
+  // moment ago, so without this the map is 0x0 until something else
+  // resizes the window.
+  radiusMap.invalidateSize();
+  await refreshRadiusMap();
+  radiusMap.fitView();
+}
+
+function closeRadiusMap() {
+  mapPanel().classList.add("hidden");
+  renderFilters();
+}
+
+/** Pulls the per-filter statuses and redraws. Called from runQuery, so
+ * the map always shows the filter the counter is describing. Opening the
+ * map calls it with nothing, which is what the fallback is for: the
+ * count on screen is already right, and asking for it again would only
+ * risk showing a different one. */
+async function refreshRadiusMap(result = lastQueryResult) {
+  if (!radiusMap || !mapIsOpen()) return;
+  try {
+    const res = await api("/api/map/status", {
+      method: "POST",
+      body: JSON.stringify(buildFilterPayload()),
+    });
+    if (!res.ok) return;
+    const status = await res.json();
+
+    // The points are static for a cycle and large; the status says
+    // which cycle its codes belong to, so that is what decides whether
+    // they need refetching. The two must come from the same cycle or
+    // every colour after the first difference lands on the wrong
+    // airport.
+    if (mapPointsLoaded !== status.cycle_date) {
+      const pointsRes = await api("/api/map/points");
+      if (!pointsRes.ok) return;
+      const payload = await pointsRes.json();
+      radiusMap.setPoints(payload);
+      mapPointsLoaded = payload.cycle_date;
+    }
+    radiusMap.setStatus(status);
+  } catch {
+    // A failed refresh leaves the last good picture up rather than
+    // blanking the map; the next filter change tries again.
+    return;
+  }
+  if (result) {
+    radiusMap.setCounter(
+      `${result.total_count.toLocaleString()} / ${result.cap.toLocaleString()} entries`,
+      result.level === "green" ? "" : result.level
+    );
+  }
+  radiusMap.redraw();
+}
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || !radiusMap || !mapIsOpen()) return;
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  if (activeRadiusId) setActiveRadius(null);
+  else if (stagedCenter) setStagedCenter(null);
+});
+
+
 // ---------- memory groups ----------
 //
 // The radio has 9 group slots. Six carry whichever naming scheme is
@@ -2513,6 +2710,9 @@ async function runQuery() {
   renderCounter(result);
   renderResults(result);
   updateGenerateButton(result);
+  // The map is a picture of this same result, so it refreshes from the
+  // same place rather than listening for filter changes of its own.
+  refreshRadiusMap(result);
 }
 
 // ---------- the live counter, and the dial it spins on ----------
