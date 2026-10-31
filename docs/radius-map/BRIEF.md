@@ -84,7 +84,8 @@ This is what the prototype does. Match it unless a decision in §8 says otherwis
     the active ring.
 - **What the controls do:**
   - With a rule active, the slider, NM box, and mode toggle edit that rule live.
-  - With nothing active, they set the defaults for the next ring.
+  - With nothing active, they set the defaults for the next ring -- and with a centre staged,
+    the slider resizes the preview ring, so those defaults are visible while being chosen.
   - Every live edit also updates those defaults, so a new ring starts at the last size and mode
     dialled in.
 - **Below the toolbar:** a row of rule chips, the same chips as the rail. Clicking one activates
@@ -99,8 +100,9 @@ This is what the prototype does. Match it unless a decision in §8 says otherwis
 
 1. A click within 12 px of a **ring centre** activates that rule.
 2. A click on an **airport** (hit radius 8 px) **stages** it as the centre for the next ring:
-   its ID is written into both centre inputs (the map toolbar's and the rail's) and marked on
-   the map, but **no ring is created**. **Add ring** or the rail's **Add** creates it. If a rule
+   its ID is written into both centre inputs (the map toolbar's and the rail's), and a preview
+   ring is drawn at the toolbar's radius which the slider resizes live -- but **no ring is
+   created**. **Add ring** or the rail's **Add** creates it. If a rule
    is already centred there, that rule is activated instead. Clicking the staged point again
    clears it.
 3. A click on **open map with a rule active** deactivates it.
@@ -162,8 +164,14 @@ Count the ones without a position as "not on map" in the legend; don't drop them
 - **Hint (top-right):** `Click an airport to choose it as a center, or a ring's center to edit
   it`; with a centre staged, `{ID} chosen - press Add ring, or Add in the rail`; with a rule
   active, `Slider resizes this ring. Click open map or press Esc when done.`
-- **Staged centre:** a dashed `--acc` circle and crosshair with a dashed label box, so it reads
-  as a proposal rather than something already applied.
+- **Staged centre:** a dashed `--acc` crosshair and label box, plus a **live preview ring** at
+  the toolbar's current radius -- `--acc` stroke 2px, dashed 6/5, 10% fill. The slider resizes
+  it before anything is committed, so the choice is made by looking rather than by guessing a
+  number.
+
+  The preview stays `--acc` whatever the mode toggle says: blue means "being chosen". It takes
+  the include green or the exclude pink and hatch only on **Add**, which is what makes the
+  commit visible.
 - **Legend (bottom-left):** one entry per mark above.
 - **Labels:** airport IDs appear at zoom ≥ 8 (selected and excluded only), and at zoom ≥ 9 for
   every drawn airport.
