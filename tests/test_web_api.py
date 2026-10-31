@@ -792,3 +792,128 @@ def test_web_query_excludes_categories_hidden_from_the_filter_list(client):
     body = client.post("/api/query", json={"mode": "smart"}).json()
     returned = {c["code"] for c in body["category_counts"]}
     assert not (returned & HIDDEN_FROM_WEB_UI_CATEGORIES), returned & HIDDEN_FROM_WEB_UI_CATEGORIES
+
+
+# ---------- the radius map's endpoints ----------
+
+
+def _map_client(tmp_path) -> TestClient:
+    data = NormalizedData(
+        airports=[
+            Airport(id="AAA", name="A Field", city="LOS ANGELES", state="CA",
+                    lat=34.0, lon=-118.0, public_use=True),
+            Airport(id="BBB", name="B Field", city="SAN FRANCISCO", state="CA",
+                    lat=37.0, lon=-122.0, public_use=True),
+        ],
+        frequencies=[
+            Frequency(airport_id="AAA", freq_mhz=122.8, freq_category="CTAF"),
+            Frequency(airport_id="AAA", freq_mhz=118.0, freq_category="TOWER"),
+            Frequency(airport_id="VOR1", freq_mhz=117.0, freq_category="VOR",
+                      lat=34.1, lon=-118.1, state="CA", city="LOS ANGELES", name="LA VOR"),
+            # No position: never drawn, counted instead.
+            Frequency(airport_id="TR1", freq_mhz=124.0, freq_category="TRACON",
+                      state="CA", city="LOS ANGELES"),
+        ],
+        ils=[],
+    )
+    app = create_app(cache_dir=tmp_path)
+    app.state.afp_state.loaded = LoadedCycle(
+        cycle_date=date(2026, 9, 3), data=data, conn=build_database(data)
+    )
+    return TestClient(app)
+
+
+def test_map_points_are_stable_for_a_loaded_cycle(tmp_path):
+    """The status endpoint returns one code per point, positionally.
+    If the order moved between the two calls every colour after the
+    change would land on the wrong airport.
+    """
+    client = _map_client(tmp_path)
+    first = client.get("/api/map/points").json()["points"]
+    second = client.get("/api/map/points").json()["points"]
+    assert [p["id"] for p in first] == [p["id"] for p in second]
+
+
+def test_map_points_carry_what_the_map_draws_and_labels(tmp_path):
+    client = _map_client(tmp_path)
+    points = {p["id"]: p for p in client.get("/api/map/points").json()["points"]}
+
+    assert points["AAA"]["kind"] == "airport"
+    assert points["AAA"]["freq_count"] == 2
+    assert points["AAA"]["public_use"] is True
+    # A standalone facility has no public/private at all, rather than a
+    # default of either.
+    assert points["VOR1"]["kind"] == "facility"
+    assert points["VOR1"]["public_use"] is None
+
+
+def test_a_facility_with_no_position_is_not_a_point(tmp_path):
+    client = _map_client(tmp_path)
+    ids = {p["id"] for p in client.get("/api/map/points").json()["points"]}
+    assert "TR1" not in ids
+
+
+def test_map_status_returns_one_code_per_point(tmp_path):
+    client = _map_client(tmp_path)
+    points = client.get("/api/map/points").json()["points"]
+    body = client.post("/api/map/status", json={}).json()
+    assert len(body["statuses"]) == len(points)
+
+
+def test_map_status_counts_what_it_could_not_draw(tmp_path):
+    """So the legend can say so rather than the facility vanishing."""
+    client = _map_client(tmp_path)
+    assert client.post("/api/map/status", json={}).json()["unplottable"] == 1
+
+
+def test_map_status_resolves_the_rings_for_the_client(tmp_path):
+    """The map draws circles, so it needs coordinates -- resolved here
+    rather than by a second round of /api/resolve-center calls.
+    """
+    client = _map_client(tmp_path)
+    body = client.post(
+        "/api/map/status",
+        json={"radius_filters": [{"center": "AAA", "radius_nm": 50, "mode": "include", "id": "r1"}]},
+    ).json()
+
+    assert body["rings"] == [
+        {"id": "r1", "center": "AAA", "lat": 34.0, "lon": -118.0,
+         "radius_nm": 50.0, "mode": "include"}
+    ]
+
+
+def test_map_status_says_why_each_point_is_in_or_out(tmp_path):
+    """The whole point of the endpoint: the result set says who
+    survived, this says why the others did not.
+    """
+    client = _map_client(tmp_path)
+    points = [p["id"] for p in client.get("/api/map/points").json()["points"]]
+    codes = client.post(
+        "/api/map/status",
+        json={"radius_filters": [{"center": "AAA", "radius_nm": 50, "mode": "include"}]},
+    ).json()["statuses"]
+    by_id = dict(zip(points, codes))
+
+    assert by_id["AAA"] == "S"   # selected
+    assert by_id["BBB"] == "O"   # outside every include ring
+    assert by_id["VOR1"] == "S"
+
+
+def test_map_status_rejects_an_unresolvable_centre_like_the_query_does(tmp_path):
+    """Drawing a map of a filter that cannot run would be worse than
+    refusing: the user would tune against a picture the export does not
+    agree with.
+    """
+    client = _map_client(tmp_path)
+    body = {"radius_filters": [{"center": "ZZZ9", "radius_nm": 50, "mode": "include"}]}
+    assert client.post("/api/map/status", json=body).status_code == 400
+    assert client.post("/api/query", json=body).status_code == 400
+
+
+def test_the_map_endpoints_need_a_loaded_cycle(tmp_path):
+    """400, the same as every other endpoint that needs one -- going
+    through _require_loaded rather than inventing a second convention.
+    """
+    client = TestClient(create_app(cache_dir=tmp_path))
+    assert client.get("/api/map/points").status_code == 400
+    assert client.post("/api/map/status", json={}).status_code == 400

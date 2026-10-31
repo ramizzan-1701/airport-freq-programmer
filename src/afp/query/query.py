@@ -22,6 +22,7 @@ which airports the current filters happen to keep.
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import dataclass
 
 from ..schema import Airport, Frequency, Ils, NormalizedData
 from ..selection import ALPHABETICAL, Entry, select_entries
@@ -58,6 +59,42 @@ def _radius_clauses(
     Templates are passed in because airports and standalone facilities
     read position from different columns and differ on NULL handling.
     """
+    inc_clause, inc_params, exc_clause, exc_params = radius_halves(
+        filters, include_template=include_template, exclude_template=exclude_template
+    )
+
+    clauses: list[str] = []
+    params: list = []
+    # Params must be appended in the same order the clauses are joined,
+    # not in the order the filters were declared, or the placeholders bind
+    # to the wrong values once includes and excludes are interleaved.
+    if inc_clause:
+        clauses.append(inc_clause)
+        params += inc_params
+    if exc_clause:
+        clauses.append(exc_clause)
+        params += exc_params
+
+    return " AND ".join(clauses), params
+
+
+def radius_halves(
+    filters: FilterState, *, include_template: str, exclude_template: str
+) -> tuple[str, list, str, list]:
+    """The include and exclude sides as separate fragments.
+
+    _radius_clauses ANDs them together, which is what filtering wants.
+    The map wants them apart: an airport outside every include ring and
+    an airport sitting inside an exclude ring are both absent from the
+    results but mean different things to someone looking at a map, and
+    only separate tests can tell them apart.
+
+    Shared rather than reimplemented so the two can never disagree about
+    what a ring contains -- which, on a map drawn next to the number it
+    explains, would be visible as the map contradicting the counter.
+
+    Either half is "" when no rule of that kind exists.
+    """
     include_parts: list[str] = []
     include_params: list = []
     exclude_parts: list[str] = []
@@ -72,19 +109,9 @@ def _radius_clauses(
             exclude_parts.append(exclude_template)
             exclude_params += args
 
-    clauses: list[str] = []
-    params: list = []
-    # Params must be appended in the same order the clauses are joined,
-    # not in the order the filters were declared, or the placeholders bind
-    # to the wrong values once includes and excludes are interleaved.
-    if include_parts:
-        clauses.append("(" + " OR ".join(include_parts) + ")")
-        params += include_params
-    if exclude_parts:
-        clauses.append("(" + " AND ".join(exclude_parts) + ")")
-        params += exclude_params
-
-    return " AND ".join(clauses), params
+    inc = "(" + " OR ".join(include_parts) + ")" if include_parts else ""
+    exc = "(" + " AND ".join(exclude_parts) + ")" if exclude_parts else ""
+    return inc, include_params, exc, exclude_params
 
 
 def _airport_where(filters: FilterState) -> tuple[str, list]:
@@ -342,6 +369,225 @@ def apply_filters(conn: sqlite3.Connection, filters: FilterState) -> NormalizedD
     frequencies.extend(_row_to_frequency(r) for r in orphan_rows)
 
     return NormalizedData(airports=airports, frequencies=frequencies, ils=ils)
+
+
+
+# ---------- the radius map's per-point status ----------
+#
+# The map colours every airport by *why* it is in or out, which the
+# filtered result set cannot say: it holds only the survivors, and an
+# airport outside every include ring looks exactly like one in the wrong
+# state once it is gone.
+#
+# Built from the same SQL fragments apply_filters uses rather than a
+# second predicate in Python. The map sits next to the counter it
+# explains, so any disagreement between them is visible -- and would be
+# read as the counter being wrong.
+
+SELECTED = "selected"   # passes every filter
+EXCLUDED = "excluded"   # inside an exclude ring
+OUTSIDE = "outside"     # outside every include ring
+FILTERED = "filtered"   # fails the state or city filter
+SCOPE = "scope"         # fails public/private, so never drawn
+
+# The first test a point fails decides its status. Ordered, because an
+# airport in the wrong state that also happens to sit inside an exclude
+# ring is filtered, not excluded -- it was never a candidate to exclude.
+_PRECEDENCE = (SCOPE, FILTERED, OUTSIDE, EXCLUDED, SELECTED)
+
+
+@dataclass(frozen=True)
+class MapStatus:
+    """Why each point is in or out, for one filter state."""
+
+    # id -> one of the constants above. Airport ids and standalone
+    # facility ids cannot collide: a facility is defined as a frequency
+    # whose airport_id is not an airport.
+    statuses: dict[str, str]
+    # Standalone facilities with no position at all. Real NASR data has
+    # them (some TRACON/APCH_DEP rows report a frequency and no lat/lon).
+    # They cannot be drawn, so they are counted instead of vanishing.
+    unplottable: int
+
+
+def _status_from_flags(in_scope: int, passes_sc: int, in_include: int, outside_excludes: int) -> str:
+    if not in_scope:
+        return SCOPE
+    if not passes_sc:
+        return FILTERED
+    if not in_include:
+        return OUTSIDE
+    if not outside_excludes:
+        return EXCLUDED
+    return SELECTED
+
+
+def classify_points(conn: sqlite3.Connection, filters: FilterState) -> MapStatus:
+    """Per-airport and per-positioned-facility status for the radius map.
+
+    The invariant worth holding on to, and the one the tests assert: the
+    ids classified SELECTED are exactly the airport ids apply_filters
+    returns for the same FilterState. The map is a picture of the filter,
+    not a second opinion about it.
+    """
+    statuses: dict[str, str] = {}
+
+    # --- airports ---
+    include_public, include_private = filters.airport_use_scope
+    if not include_public:
+        scope_sql, scope_params = "public_use = 0", []
+    elif not include_private:
+        scope_sql, scope_params = "public_use = 1", []
+    else:
+        scope_sql, scope_params = "1", []
+
+    sc_parts: list[str] = []
+    sc_params: list = []
+    if filters.states:
+        clause, p = _in_clause("state", filters.states)
+        sc_parts.append(clause)
+        sc_params += p
+    if filters.cities:
+        clause, p = _in_clause("city", filters.cities)
+        sc_parts.append(clause)
+        sc_params += p
+    sc_sql = " AND ".join(sc_parts) if sc_parts else "1"
+
+    inc_sql, inc_params, exc_sql, exc_params = radius_halves(
+        filters,
+        include_template="haversine_nm(lat, lon, ?, ?) <= ?",
+        exclude_template="haversine_nm(lat, lon, ?, ?) > ?",
+    )
+    # No include rules means no include constraint -- everything is
+    # "inside", the same reading apply_filters gives an absent clause.
+    # No exclude rules means nothing is excluded.
+    inc_sql = inc_sql or "1"
+    exc_sql = exc_sql or "1"
+
+    rows = conn.execute(
+        f"SELECT id, ({scope_sql}), ({sc_sql}), ({inc_sql}), ({exc_sql}) FROM airports",
+        scope_params + sc_params + inc_params + exc_params,
+    ).fetchall()
+    for point_id, in_scope, passes_sc, in_include, outside_excludes in rows:
+        statuses[point_id] = _status_from_flags(in_scope, passes_sc, in_include, outside_excludes)
+
+    # --- standalone facilities ---
+    #
+    # Never gated by public/private: FACILITY_USE_CODE lives in
+    # APT_BASE.csv and has no equivalent for these at all, which is why
+    # _orphan_frequency_where leaves the scope test out too.
+    #
+    # One row per facility. A facility reports many frequencies and the
+    # position columns ride along on each of them, so an unaggregated
+    # query would classify the same id once per frequency.
+    f_sc_parts: list[str] = []
+    f_sc_params: list = []
+    if filters.states:
+        clause, p = _in_clause("state", filters.states)
+        f_sc_parts.append(clause)
+        f_sc_params += p
+    if filters.cities:
+        clause, p = _in_clause("city", filters.cities)
+        f_sc_parts.append(clause)
+        f_sc_params += p
+    f_sc_sql = " AND ".join(f_sc_parts) if f_sc_parts else "1"
+
+    # Counted separately, and then excluded from the classification
+    # query below, for a reason that is easy to trip over: SQLite
+    # short-circuits AND in a WHERE clause but not in a projection. The
+    # templates _orphan_frequency_where uses guard NULL positions with
+    # "lat IS NOT NULL AND ... haversine_nm(...)", which is safe there
+    # and raises here -- the function gets called with NULLs anyway.
+    #
+    # Dropping them first means the guards are no-ops, so the plain
+    # airport templates are exactly equivalent on what remains, and the
+    # map still uses the same distance expression as the filter.
+    unplottable = conn.execute(
+        f"""
+        SELECT COUNT(*) FROM (
+            SELECT airport_id FROM frequencies
+             WHERE {_ORPHAN_CONDITION}
+             GROUP BY airport_id
+            HAVING MAX(lat IS NOT NULL AND lon IS NOT NULL) = 0
+        )
+        """
+    ).fetchone()[0]
+
+    f_inc_sql, f_inc_params, f_exc_sql, f_exc_params = radius_halves(
+        filters,
+        include_template="haversine_nm(lat, lon, ?, ?) <= ?",
+        exclude_template="haversine_nm(lat, lon, ?, ?) > ?",
+    )
+    f_inc_sql = f_inc_sql or "1"
+    f_exc_sql = f_exc_sql or "1"
+
+    facility_rows = conn.execute(
+        f"""
+        SELECT airport_id, ({f_sc_sql}), ({f_inc_sql}), ({f_exc_sql})
+          FROM frequencies
+         WHERE rowid IN (
+               SELECT MIN(rowid) FROM frequencies
+                WHERE {_ORPHAN_CONDITION}
+                  AND lat IS NOT NULL AND lon IS NOT NULL
+                GROUP BY airport_id
+         )
+        """,
+        f_sc_params + f_inc_params + f_exc_params,
+    ).fetchall()
+
+    for point_id, passes_sc, in_include, outside_excludes in facility_rows:
+        statuses[point_id] = _status_from_flags(1, passes_sc, in_include, outside_excludes)
+
+    return MapStatus(statuses=statuses, unplottable=unplottable)
+
+
+
+def map_points(conn: sqlite3.Connection) -> list[tuple]:
+    """Every drawable point for the radius map, in a fixed order.
+
+    Static for a loaded cycle: position, name and kind do not depend on
+    any filter, so the client fetches this once and then asks only for
+    statuses as the filters change. Nationwide with private airports on
+    is about 19k rows -- re-sending coordinates on every slider tick
+    would be most of the payload and none of the information.
+
+    The order is the contract. classify_points returns a mapping, and
+    the status endpoint flattens it against this list, so both ends have
+    to walk the points the same way.
+
+    Standalone facilities with no position are left out: they cannot be
+    drawn. classify_points counts them separately so the legend can say
+    so rather than quietly losing them.
+    """
+    rows = conn.execute(
+        """
+        SELECT a.id, a.name, a.city, a.state, a.lat, a.lon, a.public_use, 'airport',
+               (SELECT COUNT(*) FROM frequencies f WHERE f.airport_id = a.id)
+          FROM airports a
+         ORDER BY a.id
+        """
+    ).fetchall()
+
+    facility_rows = conn.execute(
+        f"""
+        SELECT airport_id,
+               MIN(name),
+               MIN(city),
+               MIN(state),
+               MIN(lat),
+               MIN(lon),
+               NULL,
+               'facility',
+               COUNT(*)
+          FROM frequencies
+         WHERE {_ORPHAN_CONDITION}
+           AND lat IS NOT NULL AND lon IS NOT NULL
+         GROUP BY airport_id
+         ORDER BY airport_id
+        """
+    ).fetchall()
+
+    return list(rows) + list(facility_rows)
 
 
 def has_ils_data(conn: sqlite3.Connection) -> bool:

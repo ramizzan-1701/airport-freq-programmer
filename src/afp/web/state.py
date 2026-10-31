@@ -42,6 +42,11 @@ class LoadedCycle:
     cycle_date: date
     data: NormalizedData
     conn: Connection
+    # The radius map's point order, filled on first use and then reused.
+    # It is static for a cycle, and rebuilding it to answer every slider
+    # tick cost about 80ms against a 200ms debounce -- most of the
+    # budget, spent re-deriving something that cannot have changed.
+    map_point_ids: list[str] | None = None
 
 
 class AppState:

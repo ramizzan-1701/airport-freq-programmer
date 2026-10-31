@@ -17,6 +17,60 @@ class RadiusFilterIn(BaseModel):
     center: str = Field(..., description="Airport ID, or 'lat,lon'")
     radius_nm: float
     mode: Literal["include", "exclude"]
+    # Assigned by the client so a rule keeps its identity across
+    # reordering and removal -- which is what lets one window say which
+    # rule is being edited. Ignored by to_filter_state: it is not part of
+    # what the rule matches, and two rules with the same centre and
+    # radius filter identically whatever their ids.
+    id: str | None = None
+
+
+class MapPointOut(BaseModel):
+    """One drawable point. Static for a loaded cycle."""
+
+    id: str
+    name: str
+    city: str
+    state: str
+    lat: float
+    lon: float
+    # None for a standalone facility: FACILITY_USE_CODE lives in
+    # APT_BASE.csv and has no equivalent for them, which is why the
+    # filters never judge them on it either.
+    public_use: bool | None
+    kind: Literal["airport", "facility"]
+    freq_count: int
+
+
+class MapPointsOut(BaseModel):
+    points: list[MapPointOut]
+    # Doubles as the client's cache key: the points only change when the
+    # loaded cycle does.
+    cycle_date: date
+
+
+class MapRingOut(BaseModel):
+    """A radius rule with its centre resolved, so the map can draw it
+    without resolving centres itself."""
+
+    id: str | None = None
+    center: str
+    lat: float
+    lon: float
+    radius_nm: float
+    mode: Literal["include", "exclude"]
+
+
+class MapStatusOut(BaseModel):
+    # One code per point, in /api/map/points order. A string rather than
+    # a list: nationwide is about 19k points, and one character each
+    # keeps it to roughly 19 KB instead of a JSON array many times that.
+    statuses: str
+    # Standalone facilities with no position. Counted rather than drawn,
+    # so the legend can account for them instead of losing them.
+    unplottable: int
+    rings: list[MapRingOut]
+    cycle_date: date
 
 
 class FilterStateIn(BaseModel):

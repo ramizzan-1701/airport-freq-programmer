@@ -51,6 +51,10 @@ from .models import (
     GroupSlotOut,
     GroupsOut,
     LabeledOption,
+    MapPointOut,
+    MapPointsOut,
+    MapRingOut,
+    MapStatusOut,
     ProgressOut,
     QueryResultOut,
     ResolvedCenterOut,
@@ -542,6 +546,89 @@ def create_app(cache_dir: Path) -> FastAPI:
             entries=entries_out,
             entry_count=len(entries_out),
             group_count=len({e.group for e in state.custom_entries}),
+        )
+
+    # ---------- the radius map ----------
+    #
+    # Split in two on purpose. The points are static for a loaded cycle
+    # and large; the statuses are small and change on every slider tick.
+    # Sending them together would re-send 19k coordinates to answer a
+    # question about colour.
+
+    # One code per status, in /api/map/points order. Single characters
+    # because this is the part that travels on every filter change.
+    _STATUS_CODES = {
+        query_mod.SELECTED: "S",
+        query_mod.EXCLUDED: "E",
+        query_mod.OUTSIDE: "O",
+        query_mod.FILTERED: "F",
+        query_mod.SCOPE: "X",
+    }
+
+    def _map_point_ids(loaded: LoadedCycle) -> list[str]:
+        """The point order, cached for the cycle. See LoadedCycle."""
+        if loaded.map_point_ids is None:
+            loaded.map_point_ids = [row[0] for row in query_mod.map_points(loaded.conn)]
+        return loaded.map_point_ids
+
+    @app.get("/api/map/points", response_model=MapPointsOut)
+    def map_points() -> MapPointsOut:
+        """Every drawable point, in a fixed order. Fetched once per
+        cycle; the order is what /api/map/status indexes into."""
+        loaded = _require_loaded(app.state.afp_state)
+        return MapPointsOut(
+            points=[
+                MapPointOut(
+                    id=row[0],
+                    name=row[1] or "",
+                    city=row[2] or "",
+                    state=row[3] or "",
+                    lat=row[4],
+                    lon=row[5],
+                    public_use=None if row[6] is None else bool(row[6]),
+                    kind=row[7],
+                    freq_count=row[8],
+                )
+                for row in query_mod.map_points(loaded.conn)
+            ],
+            cycle_date=loaded.cycle_date,
+        )
+
+    @app.post("/api/map/status", response_model=MapStatusOut)
+    def map_status(body: FilterStateIn) -> MapStatusOut:
+        """Why each point is in or out, for one filter state.
+
+        Takes the same body as /api/query and resolves centres the same
+        way, so an unresolvable centre fails here exactly as it does
+        there rather than drawing a map of a filter that cannot run.
+        """
+        loaded = _require_loaded(app.state.afp_state)
+        filter_state = _build_filter_state(body, loaded)
+        result = query_mod.classify_points(loaded.conn, filter_state)
+
+        # Flattened against the same order /api/map/points returned. A
+        # point with no status cannot happen -- classify_points walks
+        # every row of both tables -- but a missing code would silently
+        # shift every colour after it, so it is spelled out.
+        codes = "".join(_STATUS_CODES[result.statuses[pid]] for pid in _map_point_ids(loaded))
+
+        rings = [
+            MapRingOut(
+                id=rule.id,
+                center=rule.center,
+                lat=resolved.center_lat,
+                lon=resolved.center_lon,
+                radius_nm=resolved.radius_nm,
+                mode=resolved.mode,
+            )
+            for rule, resolved in zip(body.radius_filters, filter_state.radius_filters)
+        ]
+
+        return MapStatusOut(
+            statuses=codes,
+            unplottable=result.unplottable,
+            rings=rings,
+            cycle_date=loaded.cycle_date,
         )
 
     # ---------- groups ----------

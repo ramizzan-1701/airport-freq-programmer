@@ -100,7 +100,45 @@ def test_radius_filters_survive_with_their_shape_intact(empty_client):
         json={"radius_filters": [{"center": "LAX", "radius_nm": 60, "mode": "include"}]},
     )
     saved = empty_client.get("/api/filters").json()["radius_filters"]
-    assert saved == [{"center": "LAX", "radius_nm": 60.0, "mode": "include"}]
+    # id rides along from the map work and is None when the writer did
+    # not supply one, which is what every pre-map saved file looks like.
+    assert saved == [{"center": "LAX", "radius_nm": 60.0, "mode": "include", "id": None}]
+
+
+def test_a_radius_rule_keeps_the_id_the_client_gave_it():
+    """The id is how one window says which rule is being edited, so it
+    has to survive the round trip through filters.json -- a rule that
+    comes back without one is a rule the map can no longer point at.
+    """
+    from afp.web.models import RadiusFilterIn
+
+    rule = RadiusFilterIn(center="LAX", radius_nm=60, mode="include", id="r7")
+    assert RadiusFilterIn(**rule.model_dump()).id == "r7"
+
+
+def test_a_saved_file_written_before_ids_existed_still_loads():
+    """Every existing install's filters.json is one of these."""
+    from afp.web.models import RadiusFilterIn
+
+    rule = RadiusFilterIn(**{"center": "LAX", "radius_nm": 60, "mode": "include"})
+    assert rule.id is None
+
+
+def test_the_id_does_not_change_what_a_rule_matches():
+    """Two rules over the same circle filter identically whatever they
+    are called. to_filter_state drops it for that reason.
+    """
+    from afp.query.filters import RadiusFilter
+    from afp.web.models import FilterStateIn
+
+    import sqlite3
+
+    state = FilterStateIn(
+        radius_filters=[{"center": "34.0,-118.0", "radius_nm": 60, "mode": "include", "id": "r1"}]
+    ).to_filter_state(sqlite3.connect(":memory:"))
+    assert state.radius_filters == (
+        RadiusFilter(center_lat=34.0, center_lon=-118.0, radius_nm=60.0, mode="include"),
+    )
 
 
 def test_what_is_saved_is_something_the_query_accepts(client):
