@@ -98,13 +98,20 @@ This is what the prototype does. Match it unless a decision in §8 says otherwis
 ### 3.4 Map clicks (priority order)
 
 1. A click within 12 px of a **ring centre** activates that rule.
-2. A click on an **airport** (hit radius 8 px) creates a ring centred on its ID, using the
-   current toolbar size and mode, and activates it. If a rule is already centred there, that
-   rule is activated instead.
+2. A click on an **airport** (hit radius 8 px) **stages** it as the centre for the next ring:
+   its ID is written into both centre inputs (the map toolbar's and the rail's) and marked on
+   the map, but **no ring is created**. **Add ring** or the rail's **Add** creates it. If a rule
+   is already centred there, that rule is activated instead. Clicking the staged point again
+   clears it.
 3. A click on **open map with a rule active** deactivates it.
-4. A click on **open map with nothing active** drops a pin: a new ring at
-   `lat.toFixed(4),lon.toFixed(4)`, activated.
-5. **Esc** deactivates (and blurs any focused input).
+4. A click on **open map with nothing active** stages a pin centre
+   (`lat.toFixed(4),lon.toFixed(4)`) the same way, again without creating anything.
+5. **Esc** deactivates, or clears a staged centre, and blurs any focused input.
+
+Creating on click was the original design (see §8). It was changed after trying it: both forms
+already ask for a centre and then an Add, so creating on the click alone was the odd one out,
+and on a map of 20k airports a stray click became a ring. Staging keeps the two-step the user
+already knows and makes a mis-click free.
 
 Leaflet already suppresses the click after a drag, so panning never creates rings.
 
@@ -152,8 +159,11 @@ Count the ones without a position as "not on map" in the legend; don't drop them
   unselected states are dimmed when any state is selected.
 - **Badges (top-left):** `State: CA, NV`, `City: SAN JOSE …`, the use scope, and
   `{n} categories` when a category filter is set.
-- **Hint (top-right):** `Click an airport to add a ring, or a ring's center to edit it`, or,
-  when a rule is active, `Slider resizes this ring. Click open map or press Esc when done.`
+- **Hint (top-right):** `Click an airport to choose it as a center, or a ring's center to edit
+  it`; with a centre staged, `{ID} chosen - press Add ring, or Add in the rail`; with a rule
+  active, `Slider resizes this ring. Click open map or press Esc when done.`
+- **Staged centre:** a dashed `--acc` circle and crosshair with a dashed label box, so it reads
+  as a proposal rather than something already applied.
 - **Legend (bottom-left):** one entry per mark above.
 - **Labels:** airport IDs appear at zoom ≥ 8 (selected and excluded only), and at zoom ≥ 9 for
   every drawn airport.
@@ -363,10 +373,9 @@ Follow the existing style: pytest, plain-language names, and docstrings that say
 
 ## 8. Decisions left open
 
-- **Click-to-create.** Clicking an airport currently creates a ring immediately. That is the
-  fastest path, but it can be triggered by accident. The alternative: the first click selects
-  the airport, and the ring is created on the first slider or Add. Try it in the prototype and
-  decide before step 3.
+- ~~**Click-to-create.**~~ **Decided:** clicking stages a centre; **Add ring** or the rail's
+  **Add** creates the ring. See §3.4. The prototype was changed to match, so it is the
+  reference for this too.
 - **Dragging rings.** Drag a ring centre to move it (snap to the nearest airport on release),
   or drag the edge to resize. Not in the prototype; a good follow-up.
 - **Online basemap.** An optional tile layer when online, with the vendored outlines as the
