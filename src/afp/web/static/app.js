@@ -1279,6 +1279,8 @@ function syncRadiusRow(rule) {
   }
   const text = box.querySelector(".radius-item-text");
   if (text) text.textContent = radiusLabel(rule);
+  const swatch = box.querySelector(".radius-swatch");
+  if (swatch) swatch.dataset.mode = rule.mode;
   const mode = box.querySelector(".radius-mode");
   if (mode) mode.value = rule.mode;
   // Not into a field being typed in: writing the value back would move
@@ -1296,6 +1298,22 @@ function removeRadiusFilter(id, onChange) {
   scheduleQuery();
 }
 
+/** The ring's colour, as a dot: an open green circle for include, a
+ * pink hatched one for exclude.
+ *
+ * The same two marks the map draws, in the same two colours, so a rule
+ * reads the same in the rail as it does on the map -- and which way a
+ * rule cuts is readable without parsing "Within" against "Exclude".
+ */
+function radiusSwatch(rf) {
+  const dot = document.createElement("span");
+  dot.className = "radius-swatch";
+  // An attribute rather than a class so a live mode change can flip it
+  // without having to know which class to take off.
+  dot.dataset.mode = rf.mode;
+  return dot;
+}
+
 /** A rule at rest. Clicking anywhere but the remove button opens it. */
 function radiusChip(rf, onChange) {
   const item = document.createElement("div");
@@ -1303,6 +1321,8 @@ function radiusChip(rf, onChange) {
   item.tabIndex = 0;
   item.setAttribute("role", "button");
   item.title = "Click to edit";
+
+  item.appendChild(radiusSwatch(rf));
 
   const text = document.createElement("span");
   text.className = "radius-item-text";
@@ -1354,6 +1374,8 @@ function radiusEditor(rf, onChange) {
   // closing the editor first.
   const head = document.createElement("div");
   head.className = "radius-item-head";
+  const swatch = radiusSwatch(rf);
+  head.appendChild(swatch);
   const text = document.createElement("span");
   text.className = "radius-item-text";
   text.textContent = radiusLabel(rf);
@@ -1430,6 +1452,7 @@ function radiusEditor(rf, onChange) {
   mode.addEventListener("change", () => {
     rf.mode = mode.value;
     text.textContent = radiusLabel(rf);
+    swatch.dataset.mode = rf.mode;
     scheduleQuery();
   });
 
@@ -2157,6 +2180,9 @@ const mapHooks = {
 
   removeRule(id) {
     removeRadiusFilter(id, () => renderFilters());
+    // The chips and the rings are both built from the rail's list, so
+    // they have to be told it just got shorter.
+    if (radiusMap) radiusMap.liveRedraw();
   },
 };
 

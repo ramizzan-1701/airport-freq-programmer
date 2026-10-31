@@ -537,6 +537,24 @@ main#app > .workspace,
 .radius-item-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .radius-remove { flex: none; }
 
+/* Which way a rule cuts, as the map draws it: an open green circle for
+   include, a pink hatched one for exclude -- the same two colours and
+   the same hatch as the rings, so the rail and the map agree without
+   anyone having to read "Within" against "Exclude". Used by the rail's
+   rows and by the map's own chips. */
+.radius-swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-right: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ok);
+}
+.radius-swatch[data-mode="exclude"] {
+  border-color: var(--warn);
+  background: repeating-linear-gradient(45deg, var(--warn) 0 1.5px, transparent 1.5px 3.5px);
+}
+
 /* The rule being edited. Accented rather than merely outlined: with
    several rules listed, which one the fields belong to has to be
    obvious at a glance. */
@@ -1434,6 +1452,8 @@ main#app > .workspace,
   padding: 0 18px 8px;
 }
 .map-chip {
+  display: inline-flex;
+  align-items: center;
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--ink2);
@@ -1445,6 +1465,24 @@ main#app > .workspace,
 }
 .map-chip:hover { border-color: var(--line); color: var(--ink); }
 .map-chip.on { border-color: var(--acc); color: var(--acc); }
+.map-chip:focus-visible { outline: 1px solid var(--acc); outline-offset: 1px; }
+
+/* Smaller than the rail's, to sit in a chip rather than a row. */
+.map-chip .radius-swatch { width: 8px; height: 8px; margin-right: 6px; }
+
+.map-chip-remove {
+  flex: none;
+  margin-left: 8px;
+  padding: 0;
+  color: var(--ink3);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+.map-chip-remove:hover { color: var(--warn); }
+.map-chip-remove:focus-visible { outline: 1px solid var(--acc); outline-offset: 1px; }
 
 /* The map itself takes whatever is left. */
 .map-canvas { flex: 1; min-height: 0; background: var(--bg); }

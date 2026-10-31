@@ -796,11 +796,48 @@
     function renderChips() {
       chipRow.innerHTML = "";
       for (const r of liveRings()) {
-        const chip = document.createElement("button");
-        chip.type = "button";
+        const label = `${r.mode === "include" ? "Within" : "Exclude"} ${r.radius_nm}nm of ${r.center}`;
+
+        // A span, not a button: it carries a remove button of its own,
+        // and a button inside a button is not valid markup -- the inner
+        // one stops being reachable by keyboard.
+        const chip = document.createElement("span");
         chip.className = "map-chip" + (r.id === hooks.activeId() ? " on" : "");
-        chip.textContent = `${r.mode === "include" ? "Within" : "Exclude"} ${r.radius_nm}nm of ${r.center}`;
-        chip.addEventListener("click", () => hooks.setActive(r.id));
+        chip.setAttribute("role", "button");
+        chip.tabIndex = 0;
+        chip.title = "Click to edit this ring";
+
+        const dot = document.createElement("span");
+        dot.className = "radius-swatch";
+        dot.dataset.mode = r.mode;
+        chip.appendChild(dot);
+
+        const text = document.createElement("span");
+        text.className = "map-chip-text";
+        text.textContent = label;
+        chip.appendChild(text);
+
+        const open = () => hooks.setActive(r.id);
+        chip.addEventListener("click", open);
+        chip.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          open();
+        });
+
+        const rm = document.createElement("button");
+        rm.type = "button";
+        rm.className = "map-chip-remove";
+        rm.textContent = "✕";
+        rm.title = "Remove this ring";
+        rm.setAttribute("aria-label", `Remove ${label}`);
+        rm.addEventListener("click", (event) => {
+          // The chip's own click would open the rule just removed.
+          event.stopPropagation();
+          hooks.removeRule(r.id);
+        });
+        chip.appendChild(rm);
+
         chipRow.appendChild(chip);
       }
     }

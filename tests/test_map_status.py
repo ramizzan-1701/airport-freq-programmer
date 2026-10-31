@@ -284,3 +284,62 @@ def test_leaflet_is_told_when_the_panel_is_resized():
     """
     assert "ResizeObserver" in MAP_JS
     assert "invalidateSize" in MAP_JS
+
+
+# ---------- the swatch, and removing a rule from its pill ----------
+
+APP_JS = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+
+
+def test_a_rule_can_be_removed_from_its_map_chip():
+    """The rail has carried a remove button all along; the map's chips
+    did not, so a ring put down from the map had to be deleted from the
+    other side of the screen.
+    """
+    assert 'className = "map-chip-remove"' in MAP_JS
+    assert ".map-chip-remove {" in STYLE_CSS
+    assert "hooks.removeRule(r.id)" in MAP_JS
+    # The chip itself opens the rule, so the remove button has to keep
+    # its click to itself or it reopens what it just deleted.
+    chip = MAP_JS.split("function renderChips()", 1)[1].split("\n    }", 1)[0]
+    assert "event.stopPropagation()" in chip
+
+
+def test_the_map_chip_is_not_a_button_inside_a_button():
+    """It carries a remove button, so it cannot be one itself: nesting
+    them is invalid markup and the inner one stops being reachable by
+    keyboard. It keeps the role and the key handling instead.
+    """
+    chip = MAP_JS.split("function renderChips()", 1)[1].split("\n    }", 1)[0]
+    assert 'const chip = document.createElement("span");' in chip
+    assert 'const chip = document.createElement("button")' not in chip
+    assert 'chip.setAttribute("role", "button")' in chip
+    assert "chip.tabIndex = 0" in chip
+    assert 'chip.addEventListener("keydown"' in chip
+
+
+def test_both_lists_mark_include_and_exclude_with_the_same_swatch():
+    """The rail and the map show the same rules. One of them growing its
+    own mark for include and exclude is how the two drift apart.
+    """
+    assert 'className = "radius-swatch"' in APP_JS  # the rail's rows
+    assert 'className = "radius-swatch"' in MAP_JS  # the map's chips
+    assert ".radius-swatch {" in STYLE_CSS
+    assert '.radius-swatch[data-mode="exclude"]' in STYLE_CSS
+
+
+def test_the_swatch_is_drawn_in_the_ring_colours():
+    """It stands for the circle on the map, so a reader can match the
+    two at a glance. The colours are held twice -- once as CSS custom
+    properties and once as literals map.js paints the rings with -- and
+    nothing else would catch them drifting apart.
+    """
+    assert 'const OK = "#3FCB57";' in MAP_JS
+    assert 'const WARN = "#E8407D";' in MAP_JS
+    assert "--ok:       #3FCB57;" in STYLE_CSS
+    assert "--warn:     #E8407D;" in STYLE_CSS
+
+    swatch = STYLE_CSS.split(".radius-swatch {", 1)[1].split("}", 1)[0]
+    assert "var(--ok)" in swatch, "include is not drawn in the include ring's colour"
+    exclude = STYLE_CSS.split('.radius-swatch[data-mode="exclude"] {', 1)[1].split("}", 1)[0]
+    assert "var(--warn)" in exclude
