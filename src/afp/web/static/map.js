@@ -923,41 +923,33 @@
       } else {
         const [p, , , code, matches] = hit;
         const use = p.public_use === null ? "facility" : p.public_use ? "public" : "private";
-        // The dot says this point is inside the rings. It does not say
+        // The dot says where this point is. It does not say whether
         // the point gives you anything: category, site type and the
-        // rest filter frequencies, and the status never saw them. An
-        // airport can sit squarely in a ring and contribute nothing.
+        // rest filter frequencies, and the status never saw them, so an
+        // airport can sit squarely inside a ring and contribute
+        // nothing. The ratio is where that gets told.
         //
-        // Only shown when it differs from the total, because "12 of 12"
-        // is the same sentence as "12 freq" with more words in it.
+        // Always a ratio, including "11 of 11 freq". Showing it only
+        // when the two differ reads as less noise and is: it makes the
+        // line's shape change between one hover and the next, so the
+        // eye has to re-find the number instead of reading the same
+        // place twice.
         //
-        // "the" filters rather than "your": with nothing selected in
-        // the rail the app still drops AIRSPACE_INFO, EMERGENCY and NDB
-        // (HIDDEN_FROM_WEB_UI_CATEGORIES), so a count can differ from
-        // the total without the user having filtered anything. The
-        // number is still the true one -- those frequencies never reach
-        // the export -- but it is not theirs to explain.
-        const kept =
-          matches == null || matches === p.freq_count
-            ? ""
-            : matches === 0
-              ? '<br><span class="map-tip-none">None pass the frequency filters</span>'
-              : `<br><span class="muted">${matches} pass the frequency filters</span>`;
-        const distances = liveRings()
-          .map(
-            (r) =>
-              `${r.mode === "include" ? "+" : "−"} ` +
-              `${r.center.includes(",") ? "pin" : r.center}: ` +
-              `${Math.round(haversineNm(p.lat, p.lon, r.lat, r.lon))} nm`
-          )
-          .join("<br>");
+        // Red whenever nothing passes -- including a point that had no
+        // frequencies to begin with, which is just as worthless and is
+        // the same question being asked.
+        const total = p.freq_count;
+        const kept = matches == null ? total : matches;
+        const freq = `${kept} of ${total} freq`;
+        const freqHtml = kept
+          ? `<span class="muted">${freq}</span>`
+          : `<span class="map-tip-none">${freq}</span>`;
         tip.innerHTML =
           `<b>${escapeHtml(p.id)}</b> ${escapeHtml(p.name)}<br>` +
           `<span class="muted">${escapeHtml(p.city)}${p.state ? ", " + escapeHtml(p.state) : ""}` +
-          ` · ${use} · ${p.freq_count} freq</span>` +
-          kept +
+          ` · ${use} · </span>` +
+          freqHtml +
           `<br><span class="muted">${STATUS_TEXT[code] || ""}</span>` +
-          (distances ? `<br>${distances}` : "") +
           '<br><span class="muted">Click to choose this as a ring center</span>';
       }
       const box = map.getSize();

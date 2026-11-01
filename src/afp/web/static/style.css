@@ -1473,9 +1473,9 @@ main#app > .workspace,
   pointer-events: none;
 }
 .map-tip .muted { color: var(--ink3); }
-/* The one line in the tooltip that is a warning rather than a
-   fact: this point is inside your rings and still gives you
-   nothing. Muted would bury the only reason it is written. */
+/* The one part of the tooltip that is a warning rather than a fact:
+   this point is inside your rings and still gives you nothing. Muted
+   like the rest of the line would bury the only reason it is there. */
 .map-tip .map-tip-none { color: var(--warn); }
 
 /* Top-left, but clear of Leaflet's zoom control, which owns the corner

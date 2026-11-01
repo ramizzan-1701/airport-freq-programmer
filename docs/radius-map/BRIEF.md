@@ -131,23 +131,24 @@ Leaflet already suppresses the click after a drag, so panning never creates ring
 
 - **On an airport:**
   - ID and name.
-  - City, state · public/private · frequency count.
-  - How many of those frequencies survive the frequency-level filters, when that is
-    fewer than all of them: `3 pass the frequency filters`, or `None pass the frequency
-    filters` in `--warn`.
+  - City, state · public/private · `{kept} of {total} freq` — how many of its frequencies
+    survive the frequency-level filters, always written as a ratio even at `11 of 11`.
+    Printing it only when the two differ reads as less noise and is not: the line changes
+    shape between one hover and the next, so the eye has to re-find the number instead of
+    reading the same place twice. In `--warn` when nothing passes, including a point that
+    had no frequencies to begin with — equally worthless, same question.
 
     This is the one place the map admits what a dot cannot say. Categories filter
     *frequencies*; the status is computed from airports, so it never sees them. On real
     data a 60nm ring around SJC holds 42 selected airports whatever the categories say —
     and under Tower-only, 28 of those 42 contribute nothing while being drawn exactly
     like the 14 that carry the result.
-
-    "the" filters, not "your": with nothing chosen in the rail the app still drops
-    `HIDDEN_FROM_WEB_UI_CATEGORIES`, so a count can sit below the total without the user
-    having filtered anything.
   - Its status text (§3.6).
-  - Its distance to each rule centre (`+ WVI: 12 nm`, `− SJC: 4 nm`).
   - `Click to add a ring here`.
+  - ~~Its distance to each rule centre.~~ **Removed.** Every rule already names its centre
+    on a pill above the map, and with four rings down the list was most of the tooltip.
+    What is lost is this airport's distance to each centre, which the pills do not carry;
+    restoring it for the *active* ring alone would be a line if it is ever missed.
 - **On a ring centre:** the rule label, plus `Click to edit this ring`, or, when it is the
   active rule, `Editing. Drag the slider to resize.`
 - **Cursor:** pointer over hits, crosshair elsewhere.

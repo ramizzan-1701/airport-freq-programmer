@@ -433,19 +433,47 @@ def test_the_badges_clear_leaflet_s_zoom_control():
     assert "left: 52px" in block, "the badges would sit under the zoom control"
 
 
+def hover_handler() -> str:
+    """Just the mousemove handler.
+
+    Bounded at both ends on purpose: everything after it in map.js --
+    the click handler, the ring drawing -- legitimately measures
+    distances and reads liveRings(), so an unbounded slice would let a
+    tooltip regression hide behind code that is doing its job.
+    """
+    after = MAP_JS.split('map.on("mousemove"')[1]
+    return after.split('map.on("mouseout"')[0]
+
+
 def test_the_hover_says_when_a_point_contributes_nothing():
     """A dot's colour says where the point is. Nothing on the map says
     whether it is worth anything, and under a narrow category filter
     most selected dots are not.
+
+    Written as a ratio in the line that already carries the total, not
+    as a sentence under it: the tooltip is read in passing, while the
+    cursor is somewhere else.
     """
-    assert "pass the frequency filters" in MAP_JS
-    assert "None pass the frequency filters" in MAP_JS
+    hover = hover_handler()
+    assert "${kept} of ${total} freq" in hover
+    assert "map-tip-none" in hover
 
 
-def test_the_hover_does_not_call_them_your_filters():
-    """With nothing selected in the rail the app still drops
-    AIRSPACE_INFO, EMERGENCY and NDB, so a count can sit below the total
-    without the user having filtered anything. The number is honest; the
-    attribution would not be.
+def test_the_ratio_is_always_written():
+    """Including "11 of 11 freq". Printing it only when the two differ
+    reads as less noise and is not: the line changes shape between one
+    hover and the next, so the eye has to re-find the number instead of
+    reading the same place twice.
     """
-    assert "pass your frequency filters" not in MAP_JS
+    hover = hover_handler()
+    assert "const freq = `${kept} of ${total} freq`;" in hover
+    assert "? `${total} freq`" not in hover, "the ratio went conditional again"
+
+
+def test_the_hover_does_not_list_a_distance_per_ring():
+    """Every ring already names its centre on a pill across the top,
+    and with four rings down the list was most of the tooltip.
+    """
+    hover = hover_handler()
+    assert "nm`" not in hover, "the per-ring distance list is back"
+    assert "liveRings()" not in hover
