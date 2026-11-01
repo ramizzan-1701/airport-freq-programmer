@@ -40,11 +40,22 @@
   const FILTERED = "F";
   const SCOPE = "X";
 
+  /** What each dot colour means, in the one place that says it.
+   *
+   * Read by the hover and by the legend, which is the point: the legend
+   * is the key the hover is read against, so the two phrasing the same
+   * status differently -- "State/city filtered" beside the dot and
+   * "Filtered out by state/city" under the cursor -- made you stop and
+   * work out they were the same thing.
+   *
+   * "radius" rather than "ring" because that is the word the app uses
+   * elsewhere: the rail's section is Geographic Radius.
+   */
   const STATUS_TEXT = {
     [SELECTED]: "Selected",
-    [EXCLUDED]: "Excluded by a radius",
-    [OUTSIDE]: "Outside every include ring",
-    [FILTERED]: "Filtered out by state/city",
+    [EXCLUDED]: "Excluded",
+    [OUTSIDE]: "Outside radius",
+    [FILTERED]: "City/State filtered",
   };
 
   // Same radius the filter measures with (afp.query.geo.haversine_nm), so
@@ -870,10 +881,12 @@
 
     function renderLegend() {
       const marks = [
-        [OK, "Selected"],
-        [WARN, "Excluded by a radius"],
-        [OUTSIDE_GREY, "Outside include rings"],
-        [FILTERED_GREY, "State/city filtered"],
+        [OK, STATUS_TEXT[SELECTED]],
+        [WARN, STATUS_TEXT[EXCLUDED]],
+        [OUTSIDE_GREY, STATUS_TEXT[OUTSIDE]],
+        [FILTERED_GREY, STATUS_TEXT[FILTERED]],
+        // Not a status of its own: an --acc halo drawn around a dot
+        // that already has one, so it has no entry in STATUS_TEXT.
         [ACC, "City match"],
       ];
       legend.innerHTML = "";

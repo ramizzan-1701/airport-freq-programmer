@@ -477,3 +477,39 @@ def test_the_hover_does_not_list_a_distance_per_ring():
     hover = hover_handler()
     assert "nm`" not in hover, "the per-ring distance list is back"
     assert "liveRings()" not in hover
+
+
+def legend_renderer() -> str:
+    return MAP_JS.split("function renderLegend")[1].split("// ---------- hover")[0]
+
+
+def test_the_legend_and_the_hover_read_the_same_table():
+    """The legend is the key the hover is read against. Two tables drift:
+    the legend said "State/city filtered" beside the dot while the hover
+    said "Filtered out by state/city" under the cursor, for the same
+    status, and the reader had to work out they were the same thing.
+    """
+    legend = legend_renderer()
+    for status in ("SELECTED", "EXCLUDED", "OUTSIDE", "FILTERED"):
+        assert f"STATUS_TEXT[{status}]" in legend, f"the legend spells {status} out itself"
+    assert '"Selected"' not in legend, "a status label is written twice again"
+
+
+def test_city_match_is_not_a_status():
+    """It is an --acc halo drawn around a dot that already has a colour,
+    so it belongs in the legend but has no row in STATUS_TEXT -- and
+    putting it there would give the hover a fifth status it can never
+    be.
+    """
+    assert '"City match"' in legend_renderer()
+    table = MAP_JS.split("const STATUS_TEXT = {")[1].split("};")[0]
+    assert "City match" not in table
+
+
+def test_the_status_labels_are_short_and_name_the_rule():
+    """Checked by value so a reword is a deliberate edit rather than
+    something that drifts one string at a time.
+    """
+    table = MAP_JS.split("const STATUS_TEXT = {")[1].split("};")[0]
+    for label in ("Selected", "Excluded", "Outside radius", "City/State filtered"):
+        assert f'"{label}"' in table

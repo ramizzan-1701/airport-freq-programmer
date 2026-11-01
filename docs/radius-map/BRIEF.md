@@ -206,7 +206,14 @@ Count the ones without a position as "not on map" in the legend; don't drop them
   The preview stays `--acc` whatever the mode toggle says: blue means "being chosen". It takes
   the include green or the exclude pink and hatch only on **Add**, which is what makes the
   commit visible.
-- **Legend (bottom-left):** one entry per mark above.
+- **Legend (bottom-left):** one entry per mark above, plus `City match` (an overlay, not a
+  status) and the not-on-map count.
+- **Status labels** are one table, read by both the legend and the hover — `Selected`,
+  `Excluded`, `Outside radius`, `City/State filtered`. They were two tables that disagreed
+  on half their entries (`State/city filtered` beside the dot, `Filtered out by state/city`
+  under the cursor), which made the key stop being a key. "radius" rather than "ring"
+  because that is the word the rest of the app uses: the rail's section is Geographic
+  Radius.
 - **Labels:** airport IDs appear at zoom ≥ 8 (selected and excluded only), and at zoom ≥ 9 for
   every drawn airport.
 
