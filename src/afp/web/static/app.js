@@ -269,20 +269,31 @@ async function init() {
 
   if (!status.loaded_cycle) {
     document.getElementById("load-panel").classList.remove("hidden");
-    renderCycleList(status.available_cycles);
+    // Drawn twice on purpose. /api/cycle-options scrapes the FAA live,
+    // with a 30s timeout, and this is the first screen of every launch
+    // -- it cannot wait on the network to paint. So: what we know from
+    // disk now, the whole answer when it arrives.
+    renderCyclePanel({ state: "checking", available: status.available_cycles });
+    loadCycleOptions();
   } else {
     document.getElementById("workspace").classList.remove("hidden");
     await initWorkspace();
+    loadCycleOptions();
   }
-
-  checkForUpdate(status.loaded_cycle);
 
   // Last, so it opens over a screen that has already rendered rather
   // than over an empty one -- on a fresh install that is the load
   // screen, which is where "Get started" then leaves you.
   if (!aboutAcknowledged) showAboutModal({ firstRun: true });
 
-  document.getElementById("fetch-btn").addEventListener("click", doFetch);
+  document.getElementById("fetch-btn").addEventListener("click", () => {
+    const button = document.getElementById("fetch-btn");
+    if (button.dataset.action === "load" && button.dataset.cycle) {
+      loadCycle(button.dataset.cycle);
+    } else {
+      doFetch();
+    }
+  });
   document.getElementById("progress-cancel").addEventListener("click", cancelFetch);
   document.getElementById("about-link").addEventListener("click", () => showAboutModal());
   document.getElementById("clear-filters").addEventListener("click", clearAllFilters);
@@ -293,29 +304,37 @@ async function init() {
   });
 }
 
-async function checkForUpdate(loadedCycle) {
-  // "Update available" against nothing loaded is meaningless -- the
-  // server reports one whenever no cycle has been processed, which is
-  // always true on a first run, so it read as "Update available" sitting
-  // beside "No data loaded". The Fetch button already covers that case.
-  if (!loadedCycle) return;
+// What the FAA currently publishes, once we have managed to ask.
+// Module-level because two things read it -- the download panel and the
+// topbar badge -- and the answer costs a live scrape, so it is asked
+// once per launch rather than once per reader.
+let publishedCycle = null;
+let lastStatus = null;
+
+/** Asks the server which situation we are in, and redraws both readers.
+ *
+ * Never throws and never blocks: a launch with no connection still has
+ * to reach a working app, so a failure here leaves the panel on what it
+ * drew from disk.
+ */
+async function loadCycleOptions() {
   try {
-    const res = await api("/api/check-update");
+    const res = await api("/api/cycle-options");
     if (!res.ok) return;
-    const data = await res.json();
-    if (data.update_available) {
-      const el = document.getElementById("cycle-status");
-      const badge = document.createElement("span");
-      badge.className = "update-badge";
-      badge.textContent = `Update available: ${data.current_published_cycle}`;
-      el.appendChild(badge);
+    const body = await res.json();
+    publishedCycle = body.published_cycle;
+    if (lastStatus) renderCycleStatus(lastStatus);
+    if (!document.getElementById("load-panel").classList.contains("hidden")) {
+      renderCyclePanel(body);
     }
   } catch {
-    // offline / FAA site unreachable -- not fatal, just skip the badge
+    // Offline. The panel keeps what it drew from disk and the badge
+    // stays off; neither is worth a message of its own.
   }
 }
 
 function renderCycleStatus(status) {
+  lastStatus = status;
   const el = document.getElementById("cycle-status");
   el.innerHTML = "";
   const text = document.createElement("span");
@@ -323,30 +342,96 @@ function renderCycleStatus(status) {
     ? `Loaded cycle: ${status.loaded_cycle} (${status.airport_count} airports)`
     : "No data loaded";
   el.appendChild(text);
+
+  // Drawn here rather than appended by whoever ran the update check,
+  // because this function clears the band and enterWorkspace() calls it
+  // again afterwards -- which used to wipe the badge off the one screen
+  // it was meant for.
+  //
+  // Measured against the loaded cycle, not against the last-processed
+  // watermark /api/check-update uses. The watermark answers "have I
+  // ever downloaded this", which stays true while the data you are
+  // working on is two months old.
+  if (status.loaded_cycle && publishedCycle && publishedCycle !== status.loaded_cycle) {
+    const badge = document.createElement("span");
+    badge.className = "update-badge";
+    badge.textContent = `Newer cycle available: ${publishedCycle}`;
+    el.appendChild(badge);
+  }
 }
 
-function renderCycleList(cycles) {
-  const el = document.getElementById("cycle-list");
-  el.innerHTML = "";
-  if (cycles.length === 0) {
-    const p = document.createElement("p");
-    p.className = "muted";
-    p.textContent = "No cached cycles found. Fetch the latest one below.";
-    el.appendChild(p);
+/** The download screen: one headline, one button, quiet alternatives.
+ *
+ * It used to list every cycle ever downloaded, each row labelled
+ * "downloaded" and each one an equally prominent way to start work on
+ * stale data. You will almost never want an older cycle, so the choice
+ * is made for you and the exceptions -- a bad download, an FAA recall
+ * -- are text links instead.
+ */
+function renderCyclePanel(options) {
+  const headline = document.getElementById("cycle-headline");
+  const button = document.getElementById("fetch-btn");
+  const alt = document.getElementById("cycle-alt");
+  alt.innerHTML = "";
+
+  const newest = options.newest_downloaded || (options.available || [])[0] || null;
+
+  // The pre-scrape draw, from /api/status alone.
+  if (options.state === "checking") {
+    headline.textContent = "Checking the FAA for the current cycle\u2026";
+    setPrimary(button, newest ? `Load cycle ${newest}` : "Fetch the current cycle",
+               newest ? "load" : "fetch", newest);
     return;
   }
-  for (const cycle of cycles) {
-    const btn = document.createElement("button");
-    btn.className = "cycle-row";
-    const date = document.createElement("span");
-    date.textContent = cycle;
-    const meta = document.createElement("span");
-    meta.className = "meta";
-    meta.textContent = "downloaded";
-    btn.append(date, meta);
-    btn.addEventListener("click", () => loadCycle(cycle));
-    el.appendChild(btn);
+
+  const published = options.published_cycle;
+  const previous = options.previous_downloaded;
+
+  if (options.state === "update_available") {
+    headline.textContent = `New cycle published ${published}.`;
+    setPrimary(button, `Fetch cycle ${published}`, "fetch", null);
+    // Skipping the download is the point of this one: it keeps you
+    // working when the FAA is unreachable or 29 MB is not worth the
+    // wait right now.
+    if (newest) addAltAction(alt, `Use ${newest} instead`, () => loadCycle(newest));
+  } else if (options.state === "current") {
+    headline.textContent = `Current cycle ${newest} \u2014 up to date.`;
+    setPrimary(button, `Load cycle ${newest}`, "load", newest);
+    // Re-fetching the cycle you already have is only ever a repair.
+    addAltAction(alt, "Re-download", () => doFetch());
+    if (previous) addAltAction(alt, `Use ${previous} instead`, () => loadCycle(previous));
+  } else if (options.state === "offline") {
+    headline.textContent = "Couldn't reach the FAA to check for a newer cycle.";
+    setPrimary(button, `Load cycle ${newest}`, "load", newest);
+    addAltAction(alt, "Check again", () => loadCycleOptions());
+    if (previous) addAltAction(alt, `Use ${previous} instead`, () => loadCycle(previous));
+  } else {
+    // Nothing downloaded. Also where an offline first run lands, and
+    // then there is no cycle to name.
+    headline.textContent = published
+      ? `No data downloaded yet. The current cycle is ${published}.`
+      : "No data downloaded yet.";
+    setPrimary(button, published ? `Fetch cycle ${published}` : "Fetch the current cycle",
+               "fetch", null);
   }
+}
+
+/** The one button. `action` is read by the click handler, which is the
+ * only thing standing between "load what I have" and "download 29 MB".
+ */
+function setPrimary(button, label, action, cycle) {
+  button.textContent = label;
+  button.dataset.action = action;
+  button.dataset.cycle = cycle || "";
+  button.disabled = action === "load" && !cycle;
+}
+
+function addAltAction(host, label, onClick) {
+  const button = document.createElement("button");
+  button.className = "load-alt-action";
+  button.textContent = label;
+  button.addEventListener("click", onClick);
+  host.appendChild(button);
 }
 
 // ---------- fetch / load progress ----------

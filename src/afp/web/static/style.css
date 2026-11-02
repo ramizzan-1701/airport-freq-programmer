@@ -237,7 +237,11 @@ body {
 }
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 
-.cycle-status { font-size: 11.5px; color: var(--ink2); }
+/* Inline-flex rather than a bare span: the badge is a second child and
+   used to butt straight against the text -- "...airports)Newer cycle
+   available". It was only ever invisible because the badge almost never
+   appeared, which is the thing that changed. */
+.cycle-status { display: inline-flex; align-items: center; gap: 10px; font-size: 11.5px; color: var(--ink2); }
 
 /* Green, not amber: this says a newer FAA cycle is available, which has
    nothing to do with the user's own groups. It only ever looked right
@@ -913,23 +917,39 @@ main#app > .workspace,
 }
 #progress-cancel { margin-top: 10px; }
 
-.cycle-list { display: flex; flex-direction: column; margin-bottom: 12px; }
-.cycle-row {
-  display: flex;
-  align-items: center;
+/* The download screen's one sentence: which cycle, and whether it is
+   the current one. Replaces a list of every cycle ever downloaded --
+   each row equally prominent, and all but the first a way to start work
+   on stale data. */
+.cycle-headline {
+  margin: 0 0 12px;
   font-size: 13px;
-  color: var(--ink);
-  border: 1px solid var(--line);
-  background: var(--input);
-  border-radius: var(--radius);
-  padding: 9px 12px;
-  margin-bottom: 6px;
-  cursor: pointer;
-  text-align: left;
-  font-family: var(--font-mono);
+  line-height: 1.6;
+  color: var(--ink2);
 }
-.cycle-row:hover { border-color: var(--acc); color: var(--acc); }
-.cycle-row .meta { margin-left: auto; font-size: 11.5px; color: var(--ink3); }
+
+/* Re-download, check again, fall back a cycle. Real actions, but rare
+   ones -- a bad download or an FAA recall -- so they are text rather
+   than buttons competing with the one thing you almost always want. */
+.load-alt {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 10px;
+}
+.load-alt:empty { margin-top: 0; }
+.load-alt-action {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink3);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.load-alt-action:hover { color: var(--acc); }
 
 /* ---------- modals ---------- */
 /* Above everything the app draws for itself: the tooltip and the row

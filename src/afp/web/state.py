@@ -6,6 +6,7 @@ session management -- one process, one loaded dataset at a time.
 from __future__ import annotations
 
 import re
+import shutil
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -145,6 +146,43 @@ class AppState:
             if all((entry / name).exists() for name in _REQUIRED_CSVS):
                 found.append(date.fromisoformat(entry.name))
         return sorted(found, reverse=True)
+
+    def prune_cycles(self, keep: int = 2) -> list[date]:
+        """Delete all but the newest `keep` downloaded cycles.
+
+        Nothing used to delete a cycle, ever. Each one is about 29 MB --
+        the extracted CSVs plus the zips they came out of, which are not
+        cleaned up after extraction either -- so a cache grew by that
+        much every 28 days for as long as the app was used. Measured at
+        84 MB and 86 MB on two installs before this existed.
+
+        Two rather than one because the newest cycle is not always the
+        one you want: if the FAA recalls data, the cycle before it is
+        the thing to fall back to, and re-downloading it is not possible
+        -- fetch only ever gets what is currently published.
+
+        The loaded cycle is never deleted, whatever its age. Nothing
+        would break if it were -- the database is built in memory from
+        the CSVs and does not read them again -- but a rule with no
+        exceptions is easier to be sure of than one with a footnote.
+
+        Returns what it deleted, so the caller can say so.
+        """
+        cycles = self.available_cycles()
+        loaded = self.loaded.cycle_date if self.loaded else None
+        doomed = [c for c in cycles[keep:] if c != loaded]
+        removed = []
+        for cycle_date in doomed:
+            try:
+                shutil.rmtree(self.cache_dir / cycle_date.isoformat())
+            except OSError:
+                # A cycle that will not delete is not worth failing a
+                # fetch over: the data is downloaded and loaded, and the
+                # only cost of leaving it is the disk it was already
+                # using.
+                continue
+            removed.append(cycle_date)
+        return removed
 
     def load_cycle(
         self, cycle_date: date, progress: ProgressTracker | None = None

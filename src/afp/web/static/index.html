@@ -25,11 +25,19 @@
       <div class="load-panel-box">
         <div class="load-panel-head">
           <h2>Download NASR Frequency Data</h2>
-          <p>Pick a previously downloaded cycle, or fetch the current one from the FAA National Airspace System Resource (NASR).</p>
+          <p>Frequency data comes from the FAA National Airspace System Resource (NASR), republished every 28 days.</p>
         </div>
         <div class="load-panel-body">
-          <div id="cycle-list" class="cycle-list"></div>
-          <button id="fetch-btn" class="btn btn-primary">Fetch latest cycle</button>
+          <!-- All three are written by renderCyclePanel(): what the
+               headline says, what the one button does, and which
+               escape hatches are offered depend on what the FAA
+               publishes and what is already downloaded, and only the
+               server can answer either. The button keeps its id so the
+               click handler and the disabled-during-fetch logic are
+               unchanged. -->
+          <p id="cycle-headline" class="cycle-headline"></p>
+          <button id="fetch-btn" class="btn btn-primary"></button>
+          <div id="cycle-alt" class="load-alt"></div>
           <p id="fetch-status"></p>
 
           <!-- Shown while a fetch or a cached load runs. The label says

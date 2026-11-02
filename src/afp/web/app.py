@@ -61,6 +61,7 @@ from .models import (
     StatusOut,
     SyncOut,
     UiStateIn,
+    CycleOptionsOut,
     UpdateCheckOut,
 )
 from .state import AppState, LoadedCycle
@@ -258,6 +259,47 @@ def create_app(cache_dir: Path) -> FastAPI:
             update_available=state.source.is_update_available(current=cycle),
         )
 
+    @app.get("/api/cycle-options", response_model=CycleOptionsOut)
+    def cycle_options() -> CycleOptionsOut:
+        """What the download screen should offer.
+
+        Separate from /api/check-update, which keeps its old meaning for
+        `afp check`: that one answers "have I ever downloaded what the
+        FAA publishes", measured against cycle_store.json. This one
+        answers "what should this screen say", measured against what is
+        actually on disk.
+
+        A scrape failure is a state here, not a 502. This screen is the
+        first thing a launch shows and it has to render something: with
+        data on disk you can work offline, and being unable to reach the
+        FAA is a sentence to print, not an error to swallow.
+        """
+        state: AppState = app.state.afp_state
+        downloaded = state.available_cycles()
+        newest = downloaded[0] if downloaded else None
+        previous = downloaded[1] if len(downloaded) > 1 else None
+
+        try:
+            published = state.source.get_current_cycle().effective_date
+        except Exception:
+            published = None
+
+        if published is None:
+            situation = "empty" if newest is None else "offline"
+        elif newest is None:
+            situation = "empty"
+        elif published in downloaded:
+            situation = "current"
+        else:
+            situation = "update_available"
+
+        return CycleOptionsOut(
+            state=situation,
+            published_cycle=published,
+            newest_downloaded=newest,
+            previous_downloaded=previous,
+        )
+
     @app.post("/api/load", response_model=StatusOut)
     def load(body: dict) -> StatusOut:
         state: AppState = app.state.afp_state
@@ -288,6 +330,11 @@ def create_app(cache_dir: Path) -> FastAPI:
             if mark_processed:
                 state.source.mark_processed(result.cycle)
             state.load_cycle(result.cycle.effective_date, progress=tracker)
+            # Only once the new cycle has been downloaded, parsed and
+            # indexed: nothing is deleted before its replacement is
+            # known good. Deliberately not done on /api/load, and not in
+            # the CLI's fetch -- a checkout should keep what it fetched.
+            state.prune_cycles()
         except Cancelled:
             # Asked for, not gone wrong. 409 rather than a 5xx so the
             # frontend can tell the two apart without inspecting text.

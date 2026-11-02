@@ -242,6 +242,36 @@ class UpdateCheckOut(BaseModel):
     update_available: bool
 
 
+class CycleOptionsOut(BaseModel):
+    """Which situation the download screen is in, and the dates it needs
+    to name.
+
+    Python decides *which* situation; the page decides how it reads. The
+    same split the About copy uses, and the reason it is worth having:
+    the four states fall out of two facts that only the server can get
+    at -- what the FAA publishes right now, and what is on disk -- and
+    deriving them in JS would mean the branch nothing can test.
+
+    `update_available` on /api/check-update does not answer this. It
+    compares the published cycle against cycle_store.json's
+    last_processed watermark, so it reads false while you work on data
+    two months old, which is the state that prompted all of this.
+    """
+
+    # "update_available": the FAA has a cycle that is not on disk.
+    # "current":          the published cycle is downloaded.
+    # "offline":          the FAA could not be reached; there is data.
+    # "empty":            nothing is downloaded.
+    state: Literal["update_available", "current", "offline", "empty"]
+    # None when the FAA could not be reached, which is the one case the
+    # page cannot name a cycle to fetch.
+    published_cycle: date | None = None
+    newest_downloaded: date | None = None
+    # The one to fall back to if the newest turns out to be bad. None
+    # until a second cycle has been downloaded.
+    previous_downloaded: date | None = None
+
+
 class LabeledOption(BaseModel):
     code: str
     label: str
